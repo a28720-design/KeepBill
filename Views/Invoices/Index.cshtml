@@ -1,0 +1,91 @@
+@model IEnumerable<KeepBill.Models.Invoice>
+@{
+    ViewData["Title"] = "Faturas";
+    var selectedStatus = ViewData["SelectedStatus"] as string;
+    var statuses = ViewData["Statuses"] as string[];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+    <div class="btn-group">
+        <a asp-action="Create" class="btn btn-success">+ Nova Fatura</a>
+        <a asp-action="ExportCsv" asp-route-status="@selectedStatus" class="btn btn-outline-secondary">Exportar CSV</a>
+    </div>
+</div>
+
+<form method="get" class="row row-cols-lg-auto g-2 align-items-center mb-3">
+    <div class="col-12">
+        <select name="status" class="form-select">
+            <option value="">Todos os estados</option>
+            @if (statuses != null)
+            {
+                foreach (var st in statuses)
+                {
+                    <option value="@st" selected="@(selectedStatus == st ? "selected" : null)">@st</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Limpar</a>
+    </div>
+</form>
+
+<div class="table-responsive shadow-sm bg-white">
+    <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Número</th>
+                <th>Cliente</th>
+                <th>Emissão</th>
+                <th>Vencimento</th>
+                <th>Estado</th>
+                <th>Total</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">Ainda não existem faturas.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var invoice in Model)
+            {
+                <tr>
+                    <td>@invoice.Number</td>
+                    <td>@invoice.Customer?.Name</td>
+                    <td>@invoice.IssueDate.ToString("dd/MM/yyyy")</td>
+                    <td>@invoice.DueDate.ToString("dd/MM/yyyy")</td>
+                    <td>
+                        <span class="badge @GetStatusClass(invoice.Status)">@invoice.Status</span>
+                    </td>
+                    <td>@invoice.GrandTotal.ToString("C")</td>
+                    <td class="text-end">
+                        <a asp-action="Details" asp-route-id="@invoice.Id" class="btn btn-sm btn-outline-secondary">Detalhes</a>
+                        <a asp-action="Edit" asp-route-id="@invoice.Id" class="btn btn-sm btn-primary">Editar</a>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@functions{
+    private string GetStatusClass(KeepBill.Models.InvoiceStatus status)
+    {
+        return status switch
+        {
+            KeepBill.Models.InvoiceStatus.Paid => "bg-success",
+            KeepBill.Models.InvoiceStatus.PartiallyPaid => "bg-info",
+            KeepBill.Models.InvoiceStatus.Cancelled => "bg-secondary",
+            KeepBill.Models.InvoiceStatus.Issued => "bg-primary",
+            _ => "bg-warning text-dark"
+        };
+    }
+}

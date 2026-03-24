@@ -1,0 +1,26 @@
+@model KeepBill.Models.Customer
+@{
+    ViewData["Title"] = "Eliminar Cliente";
+}
+
+<div class="alert alert-warning">
+    <h1 class="h4 mb-3">@ViewData["Title"]</h1>
+    <p>Tem a certeza que pretende eliminar o cliente <strong>@Model.Name</strong>?</p>
+</div>
+
+<dl class="row mb-4">
+    <dt class="col-sm-3">NIF</dt>
+    <dd class="col-sm-9">@Model.TaxId</dd>
+
+    <dt class="col-sm-3">Email</dt>
+    <dd class="col-sm-9">@Model.Email</dd>
+
+    <dt class="col-sm-3">Telefone</dt>
+    <dd class="col-sm-9">@Model.Phone</dd>
+</dl>
+
+<form asp-action="Delete" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a asp-action="Index" class="btn btn-outline-secondary ms-2">Cancelar</a>
+</form>

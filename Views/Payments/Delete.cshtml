@@ -1,0 +1,24 @@
+@model KeepBill.Models.Payment
+@{
+    ViewData["Title"] = "Eliminar pagamento";
+}
+
+<div class="alert alert-warning">
+    <h1 class="h4 mb-3">@ViewData["Title"]</h1>
+    <p>Confirma a eliminação do pagamento de <strong>@Model.Amount.ToString("C")</strong> associado à fatura?</p>
+</div>
+
+<dl class="row mb-4">
+    <dt class="col-sm-3">Fatura</dt>
+    <dd class="col-sm-9">@Model.Invoice?.Number</dd>
+    <dt class="col-sm-3">Método</dt>
+    <dd class="col-sm-9">@Model.Method</dd>
+    <dt class="col-sm-3">Data</dt>
+    <dd class="col-sm-9">@Model.PaidAt.ToString("dd/MM/yyyy")</dd>
+</dl>
+
+<form asp-action="Delete" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a asp-controller="Invoices" asp-action="Details" asp-route-id="@Model.InvoiceId" class="btn btn-outline-secondary ms-2">Cancelar</a>
+</form>

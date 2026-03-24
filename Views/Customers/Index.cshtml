@@ -1,0 +1,62 @@
+@model IEnumerable<KeepBill.Models.Customer>
+@{
+    ViewData["Title"] = "Clientes";
+    var search = ViewData["Search"] as string;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3">@ViewData["Title"]</h1>
+    <a asp-action="Create" class="btn btn-success">+ Novo Cliente</a>
+</div>
+
+<form class="row row-cols-lg-auto g-2 align-items-center mb-3" method="get">
+    <div class="col-12 flex-grow-1">
+        <input type="text" name="search" value="@search" class="form-control" placeholder="Pesquisar por nome, NIF ou email" />
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Limpar</a>
+    </div>
+</form>
+
+<div class="table-responsive shadow-sm bg-white">
+    <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Nome</th>
+                <th>NIF</th>
+                <th>Email</th>
+                <th>Telefone</th>
+                <th>Atualizado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    Ainda não existem clientes registados.
+                </td>
+            </tr>
+        }
+        else
+        {
+            foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.Name</td>
+                    <td>@item.TaxId</td>
+                    <td>@item.Email</td>
+                    <td>@item.Phone</td>
+                    <td>@(item.UpdatedAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "-")</td>
+                    <td class="text-end">
+                        <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Detalhes</a>
+                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-primary">Editar</a>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

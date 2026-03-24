@@ -1,0 +1,87 @@
+@model KeepBill.Models.ViewModels.InvoiceFormViewModel
+@{
+    var customers = ViewBag.Customers as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var statuses = ViewBag.Statuses as SelectList ?? new SelectList(Enum.GetValues(typeof(KeepBill.Models.InvoiceStatus)));
+    var products = ViewBag.Products as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+}
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <label asp-for="Invoice.Number" class="form-label"></label>
+        <input asp-for="Invoice.Number" class="form-control" />
+        <span asp-validation-for="Invoice.Number" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Invoice.CustomerId" class="form-label">Cliente</label>
+        <select asp-for="Invoice.CustomerId" class="form-select" asp-items="customers">
+            <option value="">-- Selecionar --</option>
+        </select>
+        <span asp-validation-for="Invoice.CustomerId" class="text-danger"></span>
+    </div>
+    <div class="col-md-2">
+        <label asp-for="Invoice.IssueDate" class="form-label">Data emissão</label>
+        <input asp-for="Invoice.IssueDate" class="form-control" type="date" />
+        <span asp-validation-for="Invoice.IssueDate" class="text-danger"></span>
+    </div>
+    <div class="col-md-2">
+        <label asp-for="Invoice.DueDate" class="form-label">Data vencimento</label>
+        <input asp-for="Invoice.DueDate" class="form-control" type="date" />
+        <span asp-validation-for="Invoice.DueDate" class="text-danger"></span>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="Invoice.Status" class="form-label">Estado</label>
+        <select asp-for="Invoice.Status" class="form-select" asp-items="statuses"></select>
+    </div>
+    <div class="col-md-2">
+        <label asp-for="Invoice.Currency" class="form-label">Moeda</label>
+        <input asp-for="Invoice.Currency" class="form-control" />
+    </div>
+    <div class="col-12">
+        <label asp-for="Invoice.Notes" class="form-label">Notas internas</label>
+        <textarea asp-for="Invoice.Notes" rows="2" class="form-control"></textarea>
+    </div>
+</div>
+
+<hr />
+
+<div class="table-responsive">
+    <table class="table table-sm align-middle">
+        <thead class="table-light">
+            <tr>
+                <th style="width:18%">Produto</th>
+                <th>Descrição</th>
+                <th style="width:10%">Qtd.</th>
+                <th style="width:12%">Preço</th>
+                <th style="width:10%">IVA %</th>
+            </tr>
+        </thead>
+        <tbody>
+        @for (var i = 0; i < Model.Lines.Count; i++)
+        {
+            <tr>
+                <td>
+                    <select asp-for="Lines[i].ProductId" class="form-select form-select-sm" asp-items="products">
+                        <option value="">--</option>
+                    </select>
+                </td>
+                <td>
+                    <input asp-for="Lines[i].Description" class="form-control form-control-sm" placeholder="Descrição" />
+                    <span asp-validation-for="Lines[i].Description" class="text-danger"></span>
+                </td>
+                <td>
+                    <input asp-for="Lines[i].Quantity" class="form-control form-control-sm" />
+                    <span asp-validation-for="Lines[i].Quantity" class="text-danger"></span>
+                </td>
+                <td>
+                    <input asp-for="Lines[i].UnitPrice" class="form-control form-control-sm" />
+                    <span asp-validation-for="Lines[i].UnitPrice" class="text-danger"></span>
+                </td>
+                <td>
+                    <input asp-for="Lines[i].VatRate" class="form-control form-control-sm" />
+                    <span asp-validation-for="Lines[i].VatRate" class="text-danger"></span>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,47 @@
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin-bottom: 60px;
+}
+
+.metric-card h2 {
+  font-weight: 600;
+}
+
+.metric-card {
+  border-left: 4px solid #0d6efd;
+}
+
+.toast-container {
+  pointer-events: none;
+}
+
+.toast-container .toast {
+  pointer-events: auto;
+}
+
+.auth-body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0d6efd, #6610f2);
+}
+
+.auth-card {
+  border-radius: 1rem;
+}

@@ -1,0 +1,16 @@
+@if (TempData["Toast"] is string message)
+{
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1055;">
+        <div class="toast show align-items-center text-bg-primary border-0 shadow">
+            <div class="d-flex">
+                <div class="toast-body">
+                    @message
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+    <script>
+        setTimeout(() => document.querySelectorAll('.toast').forEach(t => new bootstrap.Toast(t).hide()), 4000);
+    </script>
+}

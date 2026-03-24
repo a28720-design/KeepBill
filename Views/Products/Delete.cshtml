@@ -1,0 +1,23 @@
+@model KeepBill.Models.Product
+@{
+    ViewData["Title"] = "Eliminar Produto";
+}
+
+<div class="alert alert-warning">
+    <h1 class="h4 mb-3">@ViewData["Title"]</h1>
+    <p>Tem a certeza que pretende eliminar <strong>@Model.Name</strong>?</p>
+</div>
+
+<dl class="row mb-4">
+    <dt class="col-sm-3">Descrição</dt>
+    <dd class="col-sm-9">@Model.Description</dd>
+
+    <dt class="col-sm-3">Preço</dt>
+    <dd class="col-sm-9">@Model.UnitPrice.ToString("C")</dd>
+</dl>
+
+<form asp-action="Delete" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a asp-action="Index" class="btn btn-outline-secondary ms-2">Cancelar</a>
+</form>
