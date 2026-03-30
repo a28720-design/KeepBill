@@ -35,7 +35,8 @@ builder.Services.AddControllersWithViews();
 builder.Services.Configure<SupabaseOptions>(builder.Configuration.GetSection("Supabase"));
 builder.Services.Configure<EmailInboxOptions>(builder.Configuration.GetSection("EmailInbox"));
 builder.Services.AddSingleton<IEmailSender, KeepBillEmailSender>();
-builder.Services.AddSingleton<IEmailInvoiceScannerService, MailKitEmailInvoiceScannerService>();
+builder.Services.AddScoped<IEmailInvoiceScannerService, MailKitEmailInvoiceScannerService>();
+builder.Services.AddScoped<IUserEmailInboxSettingsService, UserEmailInboxSettingsService>();
 
 var app = builder.Build();
 

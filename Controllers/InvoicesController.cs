@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using KeepBill.Services;
 using System.Text;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -22,14 +23,22 @@ namespace KeepBill.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IEmailInvoiceScannerService _emailInvoiceScannerService;
+        private readonly IUserEmailInboxSettingsService _userEmailInboxSettingsService;
 
-        public InvoicesController(ApplicationDbContext context, IConfiguration configuration)
+        public InvoicesController(
+            ApplicationDbContext context,
+            IConfiguration configuration,
+            IEmailInvoiceScannerService emailInvoiceScannerService,
+            IUserEmailInboxSettingsService userEmailInboxSettingsService)
         {
             _context = context;
             _configuration = configuration;
+            _emailInvoiceScannerService = emailInvoiceScannerService;
+            _userEmailInboxSettingsService = userEmailInboxSettingsService;
         }
 
-        public async Task<IActionResult> Index(string? status, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
+        public async Task<IActionResult> Index(string? status, string? source, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
         {
             IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
@@ -37,18 +46,86 @@ namespace KeepBill.Controllers
                 .Include(i => i.Payments);
 
             query = await ApplyOwnershipScopeAsync(query);
-            query = ApplyInvoiceFilters(query, status, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
+            query = ApplyInvoiceFilters(query, status, source, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             ViewData["SelectedStatus"] = status;
+            ViewData["SelectedSource"] = source;
             ViewData["Search"] = search;
             ViewData["DueFrom"] = dueFrom?.ToString("yyyy-MM-dd");
             ViewData["DueTo"] = dueTo?.ToString("yyyy-MM-dd");
             ViewData["DueSoonDays"] = dueSoonDays;
             ViewData["OverdueOnly"] = overdueOnly;
             ViewData["Statuses"] = Enum.GetNames(typeof(InvoiceStatus));
+            var lastSync = _emailInvoiceScannerService.GetLastResult();
+            if (TempData["EmailLastSyncUtc"] is string tempLastSync && DateTime.TryParse(tempLastSync, out var parsedSync))
+            {
+                ViewData["EmailLastSyncUtc"] = parsedSync;
+            }
+            else
+            {
+                ViewData["EmailLastSyncUtc"] = lastSync.LastSyncUtc;
+            }
+
+            ViewData["EmailLastError"] = TempData["EmailLastError"] as string ?? lastSync.LastError;
+            ViewData["EmailImported"] = TempData["EmailImported"] is string tempImported && int.TryParse(tempImported, out var parsedImported)
+                ? parsedImported
+                : lastSync.TotalInvoicesImported;
+            ViewData["EmailSkipped"] = TempData["EmailSkipped"] is string tempSkipped && int.TryParse(tempSkipped, out var parsedSkipped)
+                ? parsedSkipped
+                : lastSync.TotalInvoicesSkipped;
+
+            var emailOptions = await _userEmailInboxSettingsService.GetAsync(User);
+            ViewData["EmailConfigured"] = !string.IsNullOrWhiteSpace(emailOptions.Host)
+                                          && !string.IsNullOrWhiteSpace(emailOptions.Username)
+                                          && !string.IsNullOrWhiteSpace(emailOptions.Password);
+            ViewData["EmailUsername"] = emailOptions.Username;
+            ViewData["EmailHost"] = emailOptions.Host;
 
             var list = await query.ToListAsync();
             return View(list);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveEmailSettings(string username, string password)
+        {
+            var current = await _userEmailInboxSettingsService.GetAsync(User);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                TempData["Toast"] = "Indica o email da tua caixa de correio.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            current.Username = username.Trim();
+            if (!string.IsNullOrWhiteSpace(password))
+            {
+                current.Password = password.Trim();
+            }
+            ApplyProviderDefaults(current);
+
+            await _userEmailInboxSettingsService.SaveAsync(User, current);
+            var options = await _userEmailInboxSettingsService.GetAsync(User);
+            var ownerCustomerId = await GetSessionCustomerIdAsync(createIfMissing: true);
+            var result = await _emailInvoiceScannerService.ScanAsync(options, ownerCustomerId);
+            TempData["EmailLastSyncUtc"] = (result.LastSyncUtc ?? DateTime.UtcNow).ToString("o");
+            TempData["EmailImported"] = result.TotalInvoicesImported.ToString();
+            TempData["EmailSkipped"] = result.TotalInvoicesSkipped.ToString();
+            TempData["EmailLastError"] = result.LastError ?? string.Empty;
+
+            if (!result.IsConfigured)
+            {
+                TempData["Toast"] = "A configuracao da tua caixa de email ainda nao esta completa.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.LastError))
+            {
+                TempData["Toast"] = $"Erro na sincronizacao: {result.LastError}";
+                return RedirectToAction(nameof(Index));
+            }
+
+            TempData["Toast"] = $"Configuracao guardada e sincronizacao concluida: {result.TotalInvoicesImported} novas faturas, {result.TotalInvoicesSkipped} ignoradas (duplicadas).";
+            return RedirectToAction(nameof(Index));
         }
 
         public async Task<IActionResult> Details(Guid? id)
@@ -64,6 +141,10 @@ namespace KeepBill.Controllers
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
+            if (!await CanAccessInvoiceAsync(invoice))
+            {
+                return Forbid();
+            }
 
             var paidAmount = invoice.Payments.Sum(p => p.Amount);
             ViewData["PaidAmount"] = paidAmount;
@@ -80,6 +161,10 @@ namespace KeepBill.Controllers
                 .Include(i => i.Payments)
                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
+            if (!await CanAccessInvoiceAsync(invoice))
+            {
+                return Forbid();
+            }
 
             var paid = invoice.Payments.Sum(p => p.Amount);
             if (status == InvoiceStatus.Draft && paid > 0m)
@@ -118,6 +203,10 @@ namespace KeepBill.Controllers
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
+            if (!await CanAccessInvoiceAsync(invoice))
+            {
+                return Forbid();
+            }
 
             var paidAmount = invoice.Payments.Sum(p => p.Amount);
             var balance = invoice.GrandTotal - paidAmount;
@@ -508,14 +597,15 @@ namespace KeepBill.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> ExportCsv(string? status, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
+        public async Task<IActionResult> ExportCsv(string? status, string? source, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
         {
             IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
                 .Include(i => i.Customer)
                 .Include(i => i.Payments);
 
-            query = ApplyInvoiceFilters(query, status, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
+            query = await ApplyOwnershipScopeAsync(query);
+            query = ApplyInvoiceFilters(query, status, source, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             var invoices = await query.ToListAsync();
             var sb = new StringBuilder();
@@ -551,6 +641,7 @@ namespace KeepBill.Controllers
         private IQueryable<Invoice> ApplyInvoiceFilters(
             IQueryable<Invoice> query,
             string? status,
+            string? source,
             string? search,
             DateTime? dueFrom,
             DateTime? dueTo,
@@ -560,6 +651,19 @@ namespace KeepBill.Controllers
             if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<InvoiceStatus>(status, out var statusFilter))
             {
                 query = query.Where(i => i.Status == statusFilter);
+            }
+
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                var normalized = source.Trim().ToLowerInvariant();
+                if (normalized == "email")
+                {
+                    query = query.Where(i => i.Number.StartsWith("EML-"));
+                }
+                else if (normalized == "manual")
+                {
+                    query = query.Where(i => !i.Number.StartsWith("EML-"));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -684,6 +788,47 @@ namespace KeepBill.Controllers
             }
 
             return query.Where(i => i.CustomerId == customerId.Value);
+        }
+
+        private async Task<bool> CanAccessInvoiceAsync(Invoice invoice)
+        {
+            if (IsCurrentUserAdmin())
+            {
+                return true;
+            }
+
+            var customerId = await GetSessionCustomerIdAsync(createIfMissing: false);
+            return customerId.HasValue && invoice.CustomerId == customerId.Value;
+        }
+
+        private static void ApplyProviderDefaults(EmailInboxOptions options)
+        {
+            var email = options.Username?.Trim().ToLowerInvariant() ?? string.Empty;
+            if (!email.Contains('@'))
+            {
+                return;
+            }
+
+            var domain = email.Split('@').Last();
+            var hostFromDomain = domain switch
+            {
+                "gmail.com" => "imap.gmail.com",
+                "outlook.com" => "outlook.office365.com",
+                "hotmail.com" => "outlook.office365.com",
+                "live.com" => "outlook.office365.com",
+                "office365.com" => "outlook.office365.com",
+                _ => options.Host
+            };
+
+            options.Host = string.IsNullOrWhiteSpace(options.Host) ? hostFromDomain : options.Host;
+            options.Port = options.Port <= 0 ? 993 : options.Port;
+            options.UseSsl = true;
+            options.Folder = string.IsNullOrWhiteSpace(options.Folder) ? "INBOX" : options.Folder;
+            options.DaysBack = options.DaysBack <= 0 ? 30 : options.DaysBack;
+            options.MaxMessages = options.MaxMessages <= 0 ? 100 : options.MaxMessages;
+            options.InvoiceKeywords = (options.InvoiceKeywords == null || options.InvoiceKeywords.Length == 0)
+                ? new[] { "fatura", "invoice", "recibo", "billing", "nif", "iva" }
+                : options.InvoiceKeywords;
         }
     }
 }

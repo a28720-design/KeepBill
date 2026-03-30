@@ -1,8 +1,9 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace KeepBill.Controllers
 {
@@ -12,15 +13,25 @@ namespace KeepBill.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly SignInManager<IdentityUser> _signInManager;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             UserManager<IdentityUser> userManager,
             SignInManager<IdentityUser> signInManager,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _configuration = configuration;
+            _logger = logger;
+        }
+
+        [HttpGet]
+        public IActionResult GoogleOneTap(string? returnUrl = null)
+        {
+            TempData["Toast"] = "Usa o botao 'Entrar com Google' na pagina de login.";
+            return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
         }
 
         [HttpPost]
@@ -32,21 +43,28 @@ namespace KeepBill.Controllers
         {
             if (string.IsNullOrWhiteSpace(credential))
             {
-                return BadRequest("Credencial Google em falta.");
+                TempData["Toast"] = "Falha no login Google: credencial em falta.";
+                return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
             }
 
-            // Double submit cookie check recomendado pelo Google One Tap.
-            if (!Request.Cookies.TryGetValue("g_csrf_token", out var csrfCookie) ||
-                string.IsNullOrWhiteSpace(csrfToken) ||
-                csrfCookie != csrfToken)
+            var hasCookie = Request.Cookies.TryGetValue("g_csrf_token", out var csrfCookie);
+            var hasToken = !string.IsNullOrWhiteSpace(csrfToken);
+            if (hasCookie && hasToken && csrfCookie != csrfToken)
             {
-                return BadRequest("CSRF token inválido.");
+                TempData["Toast"] = "Falha no login Google: token CSRF invalido.";
+                return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
+            }
+
+            if (!hasCookie || !hasToken)
+            {
+                _logger.LogWarning("Google One Tap arrived without full CSRF pair. Cookie present: {HasCookie}, token present: {HasToken}.", hasCookie, hasToken);
             }
 
             var clientId = _configuration["Authentication:Google:ClientId"];
             if (string.IsNullOrWhiteSpace(clientId))
             {
-                return BadRequest("Google ClientId não configurado.");
+                TempData["Toast"] = "Google ClientId nao configurado.";
+                return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
             }
 
             GoogleJsonWebSignature.Payload payload;
@@ -61,12 +79,14 @@ namespace KeepBill.Controllers
             }
             catch
             {
-                return BadRequest("Token Google inválido.");
+                TempData["Toast"] = "Token Google invalido.";
+                return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
             }
 
             if (string.IsNullOrWhiteSpace(payload.Email) || payload.EmailVerified != true)
             {
-                return BadRequest("Email Google inválido ou não verificado.");
+                TempData["Toast"] = "Email Google invalido ou nao verificado.";
+                return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
             }
 
             var user = await _userManager.FindByLoginAsync("Google", payload.Subject);
@@ -87,7 +107,8 @@ namespace KeepBill.Controllers
                 var createResult = await _userManager.CreateAsync(user);
                 if (!createResult.Succeeded)
                 {
-                    return BadRequest("Não foi possível criar utilizador local.");
+                    TempData["Toast"] = "Nao foi possivel criar utilizador local.";
+                    return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
                 }
             }
 
@@ -100,7 +121,8 @@ namespace KeepBill.Controllers
 
                 if (!addLogin.Succeeded)
                 {
-                    return BadRequest("Não foi possível associar login Google.");
+                    TempData["Toast"] = "Nao foi possivel associar login Google.";
+                    return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl });
                 }
             }
 
@@ -111,7 +133,7 @@ namespace KeepBill.Controllers
                 return LocalRedirect(returnUrl);
             }
 
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Dashboard", "Home");
         }
     }
 }

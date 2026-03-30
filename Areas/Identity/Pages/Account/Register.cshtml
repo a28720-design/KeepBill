@@ -1,70 +1,75 @@
-@page
+﻿@page
 @model KeepBill.Areas.Identity.Pages.Account.RegisterModel
 @{
     ViewData["Title"] = "Criar conta";
     var googleLoginUri = Url.Action("GoogleOneTap", "Auth", null, Request.Scheme);
 }
 
-<h2 class="h4 mb-4 text-center">@ViewData["Title"]</h2>
+<div class="auth-form-shell">
+    <div class="auth-heading text-center mb-4">
+        <p class="auth-kicker mb-1">Comeca agora</p>
+        <h2 class="h4 mb-2">@ViewData["Title"]</h2>
+        <p class="text-muted mb-0">Cria a tua conta para comecar a emitir faturas.</p>
+    </div>
 
-<form asp-route-returnUrl="@Model.ReturnUrl" method="post">
-    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-    <div class="mb-3">
-        <label asp-for="Input.Email" class="form-label">Email</label>
-        <input asp-for="Input.Email" class="form-control form-control-lg" autocomplete="username" />
-        <span asp-validation-for="Input.Email" class="text-danger"></span>
-    </div>
-    <div class="mb-3">
-        <label asp-for="Input.Password" class="form-label">Password</label>
-        <input asp-for="Input.Password" class="form-control form-control-lg" autocomplete="new-password" />
-        <span asp-validation-for="Input.Password" class="text-danger"></span>
-    </div>
-    <div class="mb-4">
-        <label asp-for="Input.ConfirmPassword" class="form-label">Confirmar password</label>
-        <input asp-for="Input.ConfirmPassword" class="form-control form-control-lg" autocomplete="new-password" />
-        <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
-    </div>
-    <button type="submit" class="btn btn-primary w-100 py-2">Criar conta</button>
-</form>
-
-@if (Model.ExternalLogins != null && Model.ExternalLogins.Count > 0)
-{
-    <div class="text-center my-3 text-muted">ou</div>
-    <form asp-page="./ExternalLogin" asp-route-returnUrl="@Model.ReturnUrl" method="post">
-        @foreach (var provider in Model.ExternalLogins)
-        {
-            <button type="submit" class="btn btn-outline-secondary w-100 py-2 mb-2" name="provider" value="@provider.Name" title="Entrar com @provider.DisplayName">
-                Continuar com @provider.DisplayName
-            </button>
-        }
-    </form>
-}
-
-@if (Model.HasGoogleIdentity && !string.IsNullOrWhiteSpace(googleLoginUri))
-{
-    <div class="text-center my-3 text-muted">ou</div>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <div id="g_id_onload"
-         data-client_id="@Model.GoogleClientId"
-         data-context="signup"
-         data-ux_mode="redirect"
-         data-login_uri="@googleLoginUri"
-         data-itp_support="true">
-    </div>
-    <div class="d-flex justify-content-center mb-2">
-        <div class="g_id_signin"
-             data-type="standard"
-             data-shape="rectangular"
-             data-theme="outline"
-             data-text="signup_with"
-             data-size="large"
-             data-logo_alignment="left">
+    <form asp-route-returnUrl="@Model.ReturnUrl" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+        <div class="mb-3">
+            <label asp-for="Input.Email" class="form-label">Email</label>
+            <input asp-for="Input.Email" class="form-control form-control-lg" autocomplete="username" placeholder="nome@empresa.com" />
+            <span asp-validation-for="Input.Email" class="text-danger"></span>
         </div>
-    </div>
-}
+        <div class="mb-3">
+            <label asp-for="Input.Password" class="form-label">Password</label>
+            <input asp-for="Input.Password" class="form-control form-control-lg" autocomplete="new-password" placeholder="Minimo 6 caracteres" />
+            <span asp-validation-for="Input.Password" class="text-danger"></span>
+        </div>
+        <div class="mb-4">
+            <label asp-for="Input.ConfirmPassword" class="form-label">Confirmar password</label>
+            <input asp-for="Input.ConfirmPassword" class="form-control form-control-lg" autocomplete="new-password" placeholder="Repete a password" />
+            <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2">Criar conta</button>
+    </form>
 
-<div class="mt-4 text-center">
-    <p class="mb-0">Já tens acesso? <a asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl">Entra aqui</a></p>
+    @if (Model.HasGoogleIdentity && !string.IsNullOrWhiteSpace(googleLoginUri))
+    {
+        <div class="auth-divider my-3"><span>ou</span></div>
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        <div id="g_id_onload"
+             data-client_id="@Model.GoogleClientId"
+             data-context="signup"
+             data-ux_mode="redirect"
+             data-login_uri="@googleLoginUri"
+             data-itp_support="true">
+        </div>
+        <div class="auth-social-section mb-2">
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-shape="pill"
+                 data-theme="outline"
+                 data-text="signup_with"
+                 data-size="large"
+                 data-logo_alignment="left">
+            </div>
+        </div>
+    }
+    else if (Model.ExternalLogins != null && Model.ExternalLogins.Count > 0)
+    {
+        <div class="auth-divider my-3"><span>ou</span></div>
+        <form asp-page="./ExternalLogin" asp-route-returnUrl="@Model.ReturnUrl" method="post">
+            @foreach (var provider in Model.ExternalLogins)
+            {
+                <button type="submit" class="btn btn-outline-secondary w-100 py-2 mb-2" name="provider" value="@provider.Name" title="Entrar com @provider.DisplayName">
+                    Continuar com @provider.DisplayName
+                </button>
+            }
+        </form>
+    }
+</div>
+
+<div class="auth-links mt-4 text-center">
+    <p class="mb-0">Ja tens acesso? <a asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl">Entra aqui</a></p>
 </div>
 
 @section Scripts {

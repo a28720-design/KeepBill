@@ -1,202 +1,190 @@
-﻿@model KeepBill.Models.ViewModels.DashboardViewModel
+﻿@inject IConfiguration Configuration
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "KeepBill";
+    Layout = "/Views/Shared/_PublicLayout.cshtml";
+    var adminEmails = Configuration.GetSection("Administration:AdminEmails").Get<string[]>() ?? Array.Empty<string>();
+    var contactEmail = Configuration["Landing:ContactEmail"];
+    if (string.IsNullOrWhiteSpace(contactEmail))
+    {
+        contactEmail = adminEmails.FirstOrDefault(e => !string.IsNullOrWhiteSpace(e)) ?? "admin@keepbill.local";
+    }
 }
 
-<div class="row g-3 mb-4">
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm">
-            <div class="card-body">
-                <p class="text-muted mb-1">Clientes</p>
-                <h2 class="mb-0">@Model.TotalCustomers</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm">
-            <div class="card-body">
-                <p class="text-muted mb-1">Produtos ativos</p>
-                <h2 class="mb-0">@Model.ActiveProducts</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm">
-            <div class="card-body">
-                <p class="text-muted mb-1">Faturas emitidas</p>
-                <h2 class="mb-0">@Model.InvoicesIssued</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm border-danger-subtle">
-            <div class="card-body">
-                <p class="text-muted mb-1">Em atraso</p>
-                <h2 class="mb-0 text-danger">@Model.OverdueInvoices</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm border-danger-subtle">
-            <div class="card-body">
-                <p class="text-muted mb-1">Valor em atraso</p>
-                <h2 class="mb-0 text-danger">@Model.OverdueAmount.ToString("C")</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card metric-card shadow-sm">
-            <div class="card-body">
-                <p class="text-muted mb-1">Recebido este mês</p>
-                <h2 class="mb-0">@Model.PaidThisMonth.ToString("C")</h2>
-            </div>
-        </div>
-    </div>
-</div>
+@if (TempData["LandingError"] is string error && !string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+@if (TempData["LandingSuccess"] is string success && !string.IsNullOrWhiteSpace(success))
+{
+    <div class="alert alert-success">@success</div>
+}
 
-<div class="row g-3">
-    <div class="col-lg-7">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Faturas próximas do vencimento</h5>
-                    <a asp-controller="Invoices" asp-action="Index" class="btn btn-sm btn-outline-secondary">Ver todas</a>
+<section class="landing-hero mb-5">
+    <div class="landing-glow"></div>
+    <div class="row align-items-center g-4">
+        <div class="col-lg-7">
+            <span class="landing-pill">Faturacao inteligente para PME</span>
+            <h1 class="display-5 fw-bold mt-3 mb-3">Controla faturas, pagamentos e relatorios num unico lugar.</h1>
+            <p class="lead text-muted mb-4">A KeepBill ajuda a tua empresa a emitir faturas mais rapido, acompanhar recebimentos e manter tudo organizado com um visual profissional.</p>
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-area="Identity" asp-page="/Account/Login" class="btn btn-primary btn-lg">Entrar no sistema</a>
+                <a asp-area="Identity" asp-page="/Account/Register" class="btn btn-outline-secondary btn-lg">Criar conta</a>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="landing-stats-grid">
+                <div class="landing-stat-card">
+                    <p>Emissao rapida</p>
+                    <h3>1 clique</h3>
                 </div>
-            </div>
-            <div class="card-body p-0">
-                @if (!Model.UpcomingInvoices.Any())
-                {
-                    <div class="p-4 text-muted">Sem faturas pendentes nos próximos dias.</div>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Número</th>
-                                    <th>Cliente</th>
-                                    <th>Vencimento</th>
-                                    <th>Saldo</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var invoice in Model.UpcomingInvoices)
-                            {
-                                <tr>
-                                    <td>@invoice.Number</td>
-                                    <td>@invoice.CustomerName</td>
-                                    <td>@invoice.DueDate.ToString("dd/MM")</td>
-                                    <td>@invoice.Balance.ToString("C")</td>
-                                    <td class="text-end">
-                                        <a asp-controller="Invoices" asp-action="Details" asp-route-id="@invoice.Id" class="btn btn-sm btn-outline-primary">Detalhes</a>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-5">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Montante por receber</h5>
-            </div>
-            <div class="card-body d-flex flex-column justify-content-center text-center">
-                <p class="text-muted">Saldo corrente</p>
-                <h1>@Model.OutstandingAmount.ToString("C")</h1>
-                <small class="text-muted">Soma das faturas em aberto (exclui pagas/canceladas)</small>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-3 mt-1">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Faturas em atraso</h5>
-                <a asp-controller="Invoices" asp-action="Index" asp-route-overdueOnly="true" class="btn btn-sm btn-outline-danger">Ver vencidas</a>
-            </div>
-            <div class="card-body p-0">
-                @if (!Model.OverdueInvoiceCards.Any())
-                {
-                    <div class="p-4 text-muted">Sem faturas em atraso.</div>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Numero</th>
-                                    <th>Cliente</th>
-                                    <th>Vencimento</th>
-                                    <th>Saldo</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var invoice in Model.OverdueInvoiceCards)
-                            {
-                                <tr>
-                                    <td>@invoice.Number</td>
-                                    <td>@invoice.CustomerName</td>
-                                    <td><span class="text-danger">@invoice.DueDate.ToString("dd/MM/yyyy")</span></td>
-                                    <td>@invoice.Balance.ToString("C")</td>
-                                    <td class="text-end">
-                                        <a asp-controller="Invoices" asp-action="Details" asp-route-id="@invoice.Id" class="btn btn-sm btn-outline-secondary">Abrir</a>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Resumo mensal (@DateTime.UtcNow)</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Estado</th>
-                                <th>Quantidade</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @if (!Model.MonthlySummary.Any())
-                        {
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-3">Ainda não existem faturas emitidas neste mês.</td>
-                            </tr>
-                        }
-                        else
-                        {
-                            foreach (var item in Model.MonthlySummary)
-                            {
-                                <tr>
-                                    <td>@item.Status</td>
-                                    <td>@item.Count</td>
-                                    <td>@item.Total.ToString("C")</td>
-                                </tr>
-                            }
-                        }
-                        </tbody>
-                    </table>
+                <div class="landing-stat-card">
+                    <p>Automacao</p>
+                    <h3>Email sync</h3>
+                </div>
+                <div class="landing-stat-card">
+                    <p>Visao financeira</p>
+                    <h3>Relatorios</h3>
+                </div>
+                <div class="landing-stat-card">
+                    <p>Seguranca</p>
+                    <h3>Google Login</h3>
                 </div>
             </div>
         </div>
     </div>
-</div>
+</section>
+
+<section class="mb-5">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card landing-feature-card h-100">
+                <div class="card-body">
+                    <h5>Gestao de faturas</h5>
+                    <p class="text-muted mb-0">Cria, edita e acompanha faturas com estados claros e historico completo.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card landing-feature-card h-100">
+                <div class="card-body">
+                    <h5>Pagamentos e saldo</h5>
+                    <p class="text-muted mb-0">Regista pagamentos e consulta rapidamente o valor por receber de cada cliente.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card landing-feature-card h-100">
+                <div class="card-body">
+                    <h5>Importacao por email</h5>
+                    <p class="text-muted mb-0">Sincroniza a caixa de email e adiciona automaticamente faturas ao sistema.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="h3 mb-0">Planos</h2>
+        <span class="text-muted">Sem fidelizacao</span>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card landing-pricing-card h-100">
+                <div class="card-body">
+                    <h5>Starter</h5>
+                    <p class="landing-price">19EUR<span>/mes</span></p>
+                    <ul class="landing-list">
+                        <li>Ate 100 faturas/mes</li>
+                        <li>Dashboard completo</li>
+                        <li>Suporte por email</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card landing-pricing-card landing-pricing-highlight h-100">
+                <div class="card-body">
+                    <h5>Business</h5>
+                    <p class="landing-price">49EUR<span>/mes</span></p>
+                    <ul class="landing-list">
+                        <li>Faturas ilimitadas</li>
+                        <li>Importacao por email</li>
+                        <li>Relatorios avancados</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card landing-pricing-card h-100">
+                <div class="card-body">
+                    <h5>Enterprise</h5>
+                    <p class="landing-price">Sob consulta</p>
+                    <ul class="landing-list">
+                        <li>Onboarding dedicado</li>
+                        <li>Fluxos personalizados</li>
+                        <li>Suporte prioritario</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="mb-5">
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card landing-about-card h-100">
+                <div class="card-body">
+                    <h2 class="h3">Sobre Nos</h2>
+                    <p class="text-muted mb-2">A KeepBill nasceu para simplificar a vida de negocios que precisam de faturar com rigor e rapidez.</p>
+                    <p class="text-muted mb-0">Combinamos automacao, controlo financeiro e uma experiencia clara para equipa e clientes.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card landing-about-card h-100">
+                <div class="card-body">
+                    <h2 class="h3">Contactos</h2>
+                    <p class="mb-2"><strong>Email:</strong> <a href="mailto:@contactEmail">@contactEmail</a></p>
+                    <p class="mb-0 text-muted">Resposta habitual em menos de 24h uteis.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="landing-cta card border-0 shadow-sm" id="demo-form">
+    <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+            <h2 class="mb-2">Pedir demonstracao</h2>
+            <p class="text-muted mb-0">Envia os teus dados e abrimos automaticamente um email para @contactEmail.</p>
+        </div>
+        <form asp-action="RequestDemo" method="post" class="row g-3">
+            @Html.AntiForgeryToken()
+            <div class="col-md-6">
+                <label class="form-label">Nome</label>
+                <input type="text" class="form-control" name="name" required />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" name="email" required />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Empresa</label>
+                <input type="text" class="form-control" name="company" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Telefone (opcional)</label>
+                <input type="text" class="form-control" name="phone" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">Mensagem</label>
+                <textarea class="form-control" rows="4" name="message" placeholder="Conta-nos o que precisas para a demonstracao"></textarea>
+            </div>
+            <div class="col-12 text-center">
+                <button type="submit" class="btn btn-success btn-lg px-4">Enviar pedido</button>
+            </div>
+        </form>
+    </div>
+</section>

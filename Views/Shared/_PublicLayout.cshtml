@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - KeepBill</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="landing-header py-3 mb-4">
+        <div class="container app-container d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <a class="navbar-brand fw-bold app-brand mb-0" asp-controller="Home" asp-action="Index">KeepBill</a>
+            <div class="d-flex align-items-center gap-2">
+                <a asp-area="Identity" asp-page="/Account/Login" class="btn btn-outline-secondary">Entrar</a>
+                <a asp-area="Identity" asp-page="/Account/Register" class="btn btn-primary">Criar conta</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container app-container pb-5">
+        @RenderBody()
+    </main>
+
+    <footer class="footer text-muted">
+        <div class="container app-container d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>&copy; @DateTime.UtcNow.Year KeepBill</span>
+            <a asp-controller="Home" asp-action="Privacy">Privacidade</a>
+        </div>
+    </footer>
+
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

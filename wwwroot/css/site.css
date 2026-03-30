@@ -224,17 +224,264 @@ h6 {
 .auth-body {
   min-height: 100vh;
   background:
-    radial-gradient(1000px 420px at 15% 10%, rgba(28, 79, 163, 0.24), transparent 60%),
-    radial-gradient(800px 300px at 95% 90%, rgba(31, 138, 85, 0.2), transparent 60%),
-    linear-gradient(150deg, #0f274b 0%, #1f3f77 42%, #124e6d 100%);
+    radial-gradient(1050px 420px at 10% 0%, rgba(68, 130, 234, 0.28), transparent 60%),
+    radial-gradient(850px 360px at 95% 100%, rgba(19, 160, 108, 0.22), transparent 62%),
+    linear-gradient(145deg, #0e223f 0%, #18406f 45%, #195972 100%);
+}
+
+.auth-container {
+  max-width: 980px;
 }
 
 .auth-card {
-  border-radius: var(--radius-lg);
+  border-radius: 22px;
+  box-shadow: 0 26px 60px rgba(5, 20, 40, 0.32);
+  overflow: hidden;
+}
+
+.auth-card .card-body {
+  position: relative;
+}
+
+.auth-card .card-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(245, 250, 255, 0.7) 0%, rgba(255, 255, 255, 0.95) 25%);
+  pointer-events: none;
 }
 
 .auth-card .form-control {
-  background-color: #f9fbff;
+  position: relative;
+  z-index: 1;
+  background-color: #f8fbff;
+  border-color: #cddbf0;
+}
+
+.auth-branding {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  background: #edf4ff;
+  border: 1px solid #d8e7ff;
+  color: #375f9d;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.34rem 0.62rem;
+  margin-bottom: 0.8rem;
+}
+
+.auth-subtitle {
+  color: #617694;
+  font-weight: 500;
+}
+
+.auth-form-shell {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 250, 255, 0.9) 100%);
+  border: 1px solid #e6edf8;
+  border-radius: 16px;
+  padding: 1.15rem;
+}
+
+.auth-kicker {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #456aa4;
+  background-color: #eef4ff;
+  border: 1px solid #d7e4fb;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+}
+
+.auth-divider {
+  position: relative;
+  text-align: center;
+}
+
+.auth-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid #d9e3f2;
+}
+
+.auth-divider span {
+  position: relative;
+  background: #f4f8ff;
+  color: #637b9b;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0 0.7rem;
+}
+
+.auth-links a {
+  font-weight: 600;
+}
+
+.auth-card .btn-primary {
+  min-height: 48px;
+}
+
+.auth-card .g_id_signin {
+  min-height: 44px;
+}
+
+.auth-social-section {
+  display: flex;
+  justify-content: center;
+}
+
+.landing-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, #ffffff 0%, #f3f8ff 70%);
+  border: 1px solid #d9e5f5;
+  border-radius: 22px;
+  padding: 2rem;
+}
+
+.landing-header {
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #dce7f5;
+}
+
+.landing-glow {
+  position: absolute;
+  right: -120px;
+  top: -120px;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(47, 111, 213, 0.22), rgba(47, 111, 213, 0));
+  pointer-events: none;
+}
+
+.landing-pill {
+  display: inline-block;
+  border: 1px solid #cee0fb;
+  color: #2f5ea6;
+  background-color: #edf4ff;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.34rem 0.68rem;
+}
+
+.landing-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.landing-stat-card {
+  border-radius: 14px;
+  border: 1px solid #d7e4f8;
+  background: linear-gradient(170deg, #ffffff 0%, #f2f7ff 100%);
+  padding: 1rem;
+}
+
+.landing-stat-card p {
+  margin-bottom: 0.25rem;
+  color: #607792;
+  font-size: 0.86rem;
+}
+
+.landing-stat-card h3 {
+  margin-bottom: 0;
+  font-size: 1.2rem;
+}
+
+.landing-feature-card {
+  border-radius: 16px;
+  border: 1px solid #d8e3f1;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+}
+
+.landing-feature-card h5 {
+  margin-bottom: 0.55rem;
+}
+
+.landing-pricing-card {
+  border-radius: 16px;
+  border: 1px solid #d9e5f6;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+}
+
+.landing-pricing-highlight {
+  border-color: #9fc0f6;
+  box-shadow: 0 14px 30px rgba(32, 92, 176, 0.16);
+}
+
+.landing-price {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #103865;
+  margin: 0.4rem 0 0.9rem;
+}
+
+.landing-price span {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #637b99;
+  margin-left: 0.25rem;
+}
+
+.landing-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #3d536c;
+}
+
+.landing-list li {
+  margin-bottom: 0.42rem;
+}
+
+.landing-about-card {
+  border-radius: 16px;
+  border: 1px solid #d8e5f6;
+  background: #ffffff;
+}
+
+.landing-cta {
+  border-radius: 18px;
+  background: linear-gradient(155deg, #0f355f 0%, #1b5b86 100%);
+  color: #fff;
+}
+
+.landing-cta h2 {
+  color: #fff;
+}
+
+.landing-cta .text-muted {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.landing-cta .form-label {
+  color: #fff;
+}
+
+.landing-cta .form-control {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 @keyframes riseIn {
@@ -275,5 +522,13 @@ h6 {
 
   .app-nav-link {
     padding: 0.62rem 0.78rem;
+  }
+
+  .landing-hero {
+    padding: 1.35rem;
+  }
+
+  .landing-stats-grid {
+    grid-template-columns: 1fr;
   }
 }

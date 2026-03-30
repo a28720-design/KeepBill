@@ -10,25 +10,27 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body class="auth-body d-flex align-items-center">
-    <div class="container">
+<body class="auth-body d-flex align-items-center py-4">
+    <div class="container auth-container">
         <div class="row justify-content-center">
-            <div class="col-lg-6 col-xl-5">
+            <div class="col-lg-7 col-xl-5">
                 <div class="card shadow-lg border-0 auth-card">
                     <div class="card-body p-4 p-md-5">
-                        <div class="text-center mb-4">
-                            <h1 class="h3 fw-bold">KeepBill</h1>
-                            <p class="text-muted mb-0">Gestão de faturação para o teu negócio</p>
+                        <div class="auth-branding mb-4">
+                            <span class="auth-badge">Plataforma de faturacao</span>
+                            <h1 class="h3 fw-bold mb-1">KeepBill</h1>
+                            <p class="auth-subtitle mb-0">Gestao de faturacao para o teu negocio.</p>
                         </div>
                         @RenderBody()
                     </div>
                 </div>
-                <p class="text-center text-muted mt-3 small">&copy; @DateTime.UtcNow.Year KeepBill</p>
+                <p class="text-center text-white-50 mt-3 small">&copy; @DateTime.UtcNow.Year KeepBill</p>
             </div>
         </div>
     </div>
 
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <partial name="_Toast" />
     @RenderSection("Scripts", required: false)
 </body>
 </html>

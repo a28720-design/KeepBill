@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-KeepBill-d4d84722-7a5c-4307-ac0d-b929bcba699d</UserSecretsId>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;.appdata\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

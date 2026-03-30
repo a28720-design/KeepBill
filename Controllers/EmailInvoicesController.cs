@@ -17,8 +17,7 @@ namespace KeepBill.Controllers
 
         public IActionResult Index()
         {
-            var vm = _scannerService.GetLastResult();
-            return View(vm);
+            return RedirectToAction("Index", "Invoices");
         }
 
         [HttpPost]
@@ -27,7 +26,7 @@ namespace KeepBill.Controllers
         {
             await _scannerService.ScanAsync();
             TempData["Toast"] = "Sincronizacao de email concluida.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction("Index", "Invoices");
         }
     }
 }
