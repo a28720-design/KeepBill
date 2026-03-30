@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,11 +15,13 @@ namespace KeepBill.Areas.Identity.Pages.Account
     {
         private readonly SignInManager<IdentityUser> _signInManager;
         private readonly ILogger<LoginModel> _logger;
+        private readonly IConfiguration _configuration;
 
-        public LoginModel(SignInManager<IdentityUser> signInManager, ILogger<LoginModel> logger)
+        public LoginModel(SignInManager<IdentityUser> signInManager, ILogger<LoginModel> logger, IConfiguration configuration)
         {
             _signInManager = signInManager;
             _logger = logger;
+            _configuration = configuration;
         }
 
         [BindProperty]
@@ -27,6 +30,8 @@ namespace KeepBill.Areas.Identity.Pages.Account
         public IList<AuthenticationScheme> ExternalLogins { get; set; } = new List<AuthenticationScheme>();
 
         public string? ReturnUrl { get; set; }
+        public string GoogleClientId => _configuration["Authentication:Google:ClientId"] ?? string.Empty;
+        public bool HasGoogleIdentity => !string.IsNullOrWhiteSpace(GoogleClientId);
 
         [TempData]
         public string? ErrorMessage { get; set; }

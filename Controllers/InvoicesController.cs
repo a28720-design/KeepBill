@@ -9,7 +9,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Text;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace KeepBill.Controllers
 {
@@ -17,25 +21,30 @@ namespace KeepBill.Controllers
     public class InvoicesController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public InvoicesController(ApplicationDbContext context)
+        public InvoicesController(ApplicationDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
-        public async Task<IActionResult> Index(string? status)
+        public async Task<IActionResult> Index(string? status, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
         {
-            var query = _context.Invoices
+            IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
                 .Include(i => i.Customer)
-                .OrderByDescending(i => i.IssueDate);
+                .Include(i => i.Payments);
 
-            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<InvoiceStatus>(status, out var filter))
-            {
-                query = query.Where(i => i.Status == filter).OrderByDescending(i => i.IssueDate);
-            }
+            query = await ApplyOwnershipScopeAsync(query);
+            query = ApplyInvoiceFilters(query, status, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             ViewData["SelectedStatus"] = status;
+            ViewData["Search"] = search;
+            ViewData["DueFrom"] = dueFrom?.ToString("yyyy-MM-dd");
+            ViewData["DueTo"] = dueTo?.ToString("yyyy-MM-dd");
+            ViewData["DueSoonDays"] = dueSoonDays;
+            ViewData["OverdueOnly"] = overdueOnly;
             ViewData["Statuses"] = Enum.GetNames(typeof(InvoiceStatus));
 
             var list = await query.ToListAsync();
@@ -63,8 +72,136 @@ namespace KeepBill.Controllers
             return View(invoice);
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateStatus(Guid id, InvoiceStatus status)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.Payments)
+                .FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) return NotFound();
+
+            var paid = invoice.Payments.Sum(p => p.Amount);
+            if (status == InvoiceStatus.Draft && paid > 0m)
+            {
+                TempData["Toast"] = "Nao pode marcar como Draft uma fatura com pagamentos.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            if (status == InvoiceStatus.Paid && paid < invoice.GrandTotal)
+            {
+                TempData["Toast"] = "Nao pode marcar como paga sem liquidar o valor total.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            if (status == InvoiceStatus.Cancelled && paid > 0m)
+            {
+                TempData["Toast"] = "Nao pode cancelar uma fatura com pagamentos registados.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            invoice.Status = status;
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            TempData["Toast"] = "Estado da fatura atualizado.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportPdf(Guid id)
+        {
+            var invoice = await _context.Invoices
+                .AsNoTracking()
+                .Include(i => i.Customer)
+                .Include(i => i.Lines)
+                .Include(i => i.Payments)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (invoice == null) return NotFound();
+
+            var paidAmount = invoice.Payments.Sum(p => p.Amount);
+            var balance = invoice.GrandTotal - paidAmount;
+
+            var bytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Margin(28);
+                    page.Size(PageSizes.A4);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Text("KEEPBILL").SemiBold().FontSize(18).FontColor(Colors.Blue.Darken2);
+                        col.Item().Text($"Fatura {invoice.Number}").FontSize(12);
+                        col.Item().Text($"Emitida: {invoice.IssueDate:dd/MM/yyyy}   Vencimento: {invoice.DueDate:dd/MM/yyyy}");
+                    });
+
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(12);
+                        col.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(customerCol =>
+                        {
+                            customerCol.Item().Text("Cliente").SemiBold();
+                            customerCol.Item().Text(invoice.Customer?.Name ?? "-");
+                            customerCol.Item().Text(invoice.Customer?.TaxId ?? "-");
+                            customerCol.Item().Text(invoice.Customer?.Email ?? "-");
+                        });
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(c =>
+                            {
+                                c.RelativeColumn(4);
+                                c.RelativeColumn(1);
+                                c.RelativeColumn(1.4f);
+                                c.RelativeColumn(1);
+                                c.RelativeColumn(1.4f);
+                            });
+
+                            table.Header(h =>
+                            {
+                                h.Cell().Text("Descricao").SemiBold();
+                                h.Cell().AlignRight().Text("Qtd").SemiBold();
+                                h.Cell().AlignRight().Text("Preco").SemiBold();
+                                h.Cell().AlignRight().Text("IVA").SemiBold();
+                                h.Cell().AlignRight().Text("Total").SemiBold();
+                            });
+
+                            foreach (var line in invoice.Lines)
+                            {
+                                table.Cell().Text(line.Description);
+                                table.Cell().AlignRight().Text(line.Quantity.ToString("0.##"));
+                                table.Cell().AlignRight().Text(line.UnitPrice.ToString("0.00"));
+                                table.Cell().AlignRight().Text($"{line.VatRate:0.##}%");
+                                table.Cell().AlignRight().Text(line.LineTotal.ToString("0.00"));
+                            }
+                        });
+
+                        col.Item().AlignRight().Column(totals =>
+                        {
+                            totals.Item().Text($"Subtotal: {invoice.Subtotal:0.00} {invoice.Currency}");
+                            totals.Item().Text($"IVA: {invoice.VatTotal:0.00} {invoice.Currency}");
+                            totals.Item().Text($"Total: {invoice.GrandTotal:0.00} {invoice.Currency}").SemiBold();
+                            totals.Item().Text($"Pago: {paidAmount:0.00} {invoice.Currency}");
+                            totals.Item().Text($"Em falta: {balance:0.00} {invoice.Currency}").SemiBold();
+                        });
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span($"Documento gerado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} UTC");
+                    });
+                });
+            }).GeneratePdf();
+
+            var fileName = $"fatura_{invoice.Number}.pdf";
+            return File(bytes, "application/pdf", fileName);
+        }
+
         public async Task<IActionResult> Create()
         {
+            var isAdmin = IsCurrentUserAdmin();
             var vm = new InvoiceFormViewModel
             {
                 Invoice = new Invoice
@@ -74,8 +211,17 @@ namespace KeepBill.Controllers
                     DueDate = DateTime.UtcNow.Date.AddDays(15)
                 }
             };
+
+            if (!isAdmin)
+            {
+                var customer = await GetOrCreateSessionCustomerAsync();
+                vm.Invoice.CustomerId = customer.Id;
+                ViewData["LockCustomer"] = true;
+                ViewData["LockedCustomerName"] = customer.Name;
+            }
+
             EnsureMinimumLines(vm);
-            await PopulateLookupsAsync();
+            await PopulateLookupsAsync(isAdmin ? null : vm.Invoice.CustomerId);
             return View(vm);
         }
 
@@ -83,7 +229,17 @@ namespace KeepBill.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(InvoiceFormViewModel vm)
         {
+            var isAdmin = IsCurrentUserAdmin();
+            if (!isAdmin)
+            {
+                var customer = await GetOrCreateSessionCustomerAsync();
+                vm.Invoice.CustomerId = customer.Id;
+                ViewData["LockCustomer"] = true;
+                ViewData["LockedCustomerName"] = customer.Name;
+            }
+
             CleanLines(vm);
+            ValidateInvoiceDates(vm.Invoice);
 
             if (!vm.Lines.Any())
             {
@@ -93,7 +249,7 @@ namespace KeepBill.Controllers
             if (!ModelState.IsValid)
             {
                 EnsureMinimumLines(vm);
-                await PopulateLookupsAsync();
+                await PopulateLookupsAsync(isAdmin ? null : vm.Invoice.CustomerId);
                 return View(vm);
             }
 
@@ -117,12 +273,26 @@ namespace KeepBill.Controllers
         public async Task<IActionResult> Edit(Guid? id)
         {
             if (id == null) return NotFound();
+            var isAdmin = IsCurrentUserAdmin();
 
             var invoice = await _context.Invoices
                 .Include(i => i.Lines)
+                .Include(i => i.Payments)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
+
+            if (!isAdmin)
+            {
+                var currentCustomerId = await GetSessionCustomerIdAsync(createIfMissing: false);
+                if (!currentCustomerId.HasValue || invoice.CustomerId != currentCustomerId.Value)
+                {
+                    return Forbid();
+                }
+
+                ViewData["LockCustomer"] = true;
+                ViewData["LockedCustomerName"] = (await _context.Customers.FindAsync(invoice.CustomerId))?.Name ?? "Cliente";
+            }
 
             var vm = new InvoiceFormViewModel
             {
@@ -141,7 +311,7 @@ namespace KeepBill.Controllers
                     .ToList()
             };
             EnsureMinimumLines(vm);
-            await PopulateLookupsAsync();
+            await PopulateLookupsAsync(isAdmin ? null : vm.Invoice.CustomerId);
             return View(vm);
         }
 
@@ -150,8 +320,20 @@ namespace KeepBill.Controllers
         public async Task<IActionResult> Edit(Guid id, InvoiceFormViewModel vm)
         {
             if (id != vm.Invoice.Id) return NotFound();
+            var isAdmin = IsCurrentUserAdmin();
+
+            if (!isAdmin)
+            {
+                var currentCustomerId = await GetSessionCustomerIdAsync(createIfMissing: true);
+                if (!currentCustomerId.HasValue)
+                {
+                    return Forbid();
+                }
+                vm.Invoice.CustomerId = currentCustomerId.Value;
+            }
 
             CleanLines(vm);
+            ValidateInvoiceDates(vm.Invoice);
 
             if (!vm.Lines.Any())
             {
@@ -160,15 +342,31 @@ namespace KeepBill.Controllers
 
             if (!ModelState.IsValid)
             {
+                if (!isAdmin)
+                {
+                    ViewData["LockCustomer"] = true;
+                    ViewData["LockedCustomerName"] = (await _context.Customers.FindAsync(vm.Invoice.CustomerId))?.Name ?? "Cliente";
+                }
                 EnsureMinimumLines(vm);
-                await PopulateLookupsAsync();
+                await PopulateLookupsAsync(isAdmin ? null : vm.Invoice.CustomerId);
                 return View(vm);
             }
 
             var invoice = await _context.Invoices
                 .Include(i => i.Lines)
+                .Include(i => i.Payments)
                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
+
+            if (!isAdmin)
+            {
+                var currentCustomerId = await GetSessionCustomerIdAsync(createIfMissing: false);
+                if (!currentCustomerId.HasValue || invoice.CustomerId != currentCustomerId.Value)
+                {
+                    return Forbid();
+                }
+                vm.Invoice.CustomerId = currentCustomerId.Value;
+            }
 
             invoice.CustomerId = vm.Invoice.CustomerId;
             invoice.IssueDate = vm.Invoice.IssueDate;
@@ -183,6 +381,7 @@ namespace KeepBill.Controllers
             var lines = BuildInvoiceLines(vm.Lines);
             ApplyTotals(invoice, lines);
             invoice.Lines = lines;
+            RecalculateStatusFromPayments(invoice);
 
             await _context.SaveChangesAsync();
             TempData["Toast"] = "Fatura atualizada.";
@@ -202,6 +401,14 @@ namespace KeepBill.Controllers
             vm.Lines = vm.Lines
                 .Where(l => !string.IsNullOrWhiteSpace(l.Description))
                 .ToList();
+        }
+
+        private void ValidateInvoiceDates(Invoice invoice)
+        {
+            if (invoice.DueDate.Date < invoice.IssueDate.Date)
+            {
+                ModelState.AddModelError(nameof(invoice.DueDate), "A data de vencimento deve ser igual ou posterior à data de emissão.");
+            }
         }
 
         private static List<InvoiceLine> BuildInvoiceLines(IEnumerable<InvoiceLineInput> inputs)
@@ -233,9 +440,37 @@ namespace KeepBill.Controllers
             invoice.GrandTotal = invoice.Subtotal + invoice.VatTotal;
         }
 
-        private async Task PopulateLookupsAsync()
+        private static void RecalculateStatusFromPayments(Invoice invoice)
         {
-            var customers = await _context.Customers
+            if (invoice.Status == InvoiceStatus.Cancelled)
+            {
+                return;
+            }
+
+            var paidAmount = invoice.Payments.Sum(p => p.Amount);
+            if (paidAmount <= 0m)
+            {
+                invoice.Status = invoice.Status == InvoiceStatus.Draft ? InvoiceStatus.Draft : InvoiceStatus.Issued;
+            }
+            else if (paidAmount < invoice.GrandTotal)
+            {
+                invoice.Status = InvoiceStatus.PartiallyPaid;
+            }
+            else
+            {
+                invoice.Status = InvoiceStatus.Paid;
+            }
+        }
+
+        private async Task PopulateLookupsAsync(Guid? onlyCustomerId = null)
+        {
+            IQueryable<Customer> customerQuery = _context.Customers;
+            if (onlyCustomerId.HasValue)
+            {
+                customerQuery = customerQuery.Where(c => c.Id == onlyCustomerId.Value);
+            }
+
+            var customers = await customerQuery
                 .OrderBy(c => c.Name)
                 .Select(c => new { c.Id, c.Name })
                 .ToListAsync();
@@ -273,18 +508,14 @@ namespace KeepBill.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> ExportCsv(string? status)
+        public async Task<IActionResult> ExportCsv(string? status, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
         {
-            var query = _context.Invoices
+            IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
                 .Include(i => i.Customer)
-                .Include(i => i.Payments)
-                .OrderByDescending(i => i.IssueDate);
+                .Include(i => i.Payments);
 
-            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<InvoiceStatus>(status, out var filter))
-            {
-                query = query.Where(i => i.Status == filter).OrderByDescending(i => i.IssueDate);
-            }
+            query = ApplyInvoiceFilters(query, status, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             var invoices = await query.ToListAsync();
             var sb = new StringBuilder();
@@ -315,6 +546,144 @@ namespace KeepBill.Controllers
                 return $"\"{value.Replace("\"", "\"\"")}\"";
             }
             return value;
+        }
+
+        private IQueryable<Invoice> ApplyInvoiceFilters(
+            IQueryable<Invoice> query,
+            string? status,
+            string? search,
+            DateTime? dueFrom,
+            DateTime? dueTo,
+            int? dueSoonDays,
+            bool overdueOnly)
+        {
+            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<InvoiceStatus>(status, out var statusFilter))
+            {
+                query = query.Where(i => i.Status == statusFilter);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(i =>
+                    EF.Functions.ILike(i.Number, $"%{term}%") ||
+                    EF.Functions.ILike(i.Customer!.Name, $"%{term}%"));
+            }
+
+            if (dueFrom.HasValue)
+            {
+                query = query.Where(i => i.DueDate >= dueFrom.Value.Date);
+            }
+
+            if (dueTo.HasValue)
+            {
+                query = query.Where(i => i.DueDate <= dueTo.Value.Date);
+            }
+
+            if (dueSoonDays.HasValue && dueSoonDays.Value > 0)
+            {
+                var today = DateTime.UtcNow.Date;
+                var end = today.AddDays(dueSoonDays.Value);
+                query = query.Where(i =>
+                    i.DueDate >= today &&
+                    i.DueDate <= end &&
+                    i.Status != InvoiceStatus.Paid &&
+                    i.Status != InvoiceStatus.Cancelled);
+            }
+
+            if (overdueOnly)
+            {
+                var today = DateTime.UtcNow.Date;
+                query = query.Where(i =>
+                    i.DueDate < today &&
+                    i.Status != InvoiceStatus.Paid &&
+                    i.Status != InvoiceStatus.Cancelled);
+            }
+
+            return query.OrderByDescending(i => i.IssueDate);
+        }
+
+        private bool IsCurrentUserAdmin()
+        {
+            var currentEmail = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(currentEmail))
+            {
+                return false;
+            }
+
+            var adminEmails = _configuration.GetSection("Administration:AdminEmails").Get<string[]>() ?? Array.Empty<string>();
+            return adminEmails.Any(a => string.Equals(a, currentEmail, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private async Task<Guid?> GetSessionCustomerIdAsync(bool createIfMissing)
+        {
+            var email = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return null;
+            }
+
+            var existingId = await _context.Customers
+                .Where(c => c.Email != null && c.Email.ToLower() == email.ToLower())
+                .Select(c => (Guid?)c.Id)
+                .FirstOrDefaultAsync();
+
+            if (existingId.HasValue || !createIfMissing)
+            {
+                return existingId;
+            }
+
+            var customer = await GetOrCreateSessionCustomerAsync();
+            return customer.Id;
+        }
+
+        private async Task<Customer> GetOrCreateSessionCustomerAsync()
+        {
+            var email = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                throw new InvalidOperationException("Sessão sem email associado.");
+            }
+
+            var customer = await _context.Customers
+                .FirstOrDefaultAsync(c => c.Email != null && c.Email.ToLower() == email.ToLower());
+
+            if (customer != null)
+            {
+                return customer;
+            }
+
+            var displayName = User?.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = email.Split('@')[0];
+            }
+
+            customer = new Customer
+            {
+                Name = displayName!,
+                Email = email,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Customers.Add(customer);
+            await _context.SaveChangesAsync();
+            return customer;
+        }
+
+        private async Task<IQueryable<Invoice>> ApplyOwnershipScopeAsync(IQueryable<Invoice> query)
+        {
+            if (IsCurrentUserAdmin())
+            {
+                return query;
+            }
+
+            var customerId = await GetSessionCustomerIdAsync(createIfMissing: false);
+            if (!customerId.HasValue)
+            {
+                return query.Where(i => false);
+            }
+
+            return query.Where(i => i.CustomerId == customerId.Value);
         }
     }
 }

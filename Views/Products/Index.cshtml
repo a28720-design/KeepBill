@@ -1,7 +1,11 @@
 @model IEnumerable<KeepBill.Models.Product>
 @{
-    ViewData["Title"] = "Produtos / Serviços";
-    var showInactive = (bool)(ViewData["ShowInactive"] ?? false);
+    ViewData["Title"] = "Produtos / Servicos";
+    var search = ViewData["Search"] as string;
+    var status = (ViewData["Status"] as string) ?? "active";
+    var totalProducts = ViewData["TotalProducts"] is int total ? total : 0;
+    var activeProducts = ViewData["ActiveProducts"] is int active ? active : 0;
+    var inactiveProducts = ViewData["InactiveProducts"] is int inactive ? inactive : 0;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -9,10 +13,34 @@
     <a asp-action="Create" class="btn btn-success">+ Novo Produto</a>
 </div>
 
-<form method="get" class="d-flex align-items-center gap-2 mb-3">
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="showInactive" value="true" @(showInactive ? "checked" : "") onchange="this.form.submit()" />
-        <label class="form-check-label">Mostrar inativos</label>
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card"><div class="card-body"><p class="text-muted mb-1">Total</p><h4 class="mb-0">@totalProducts</h4></div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body"><p class="text-muted mb-1">Ativos</p><h4 class="mb-0 text-success">@activeProducts</h4></div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body"><p class="text-muted mb-1">Inativos</p><h4 class="mb-0 text-secondary">@inactiveProducts</h4></div></div>
+    </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-12 col-lg-4">
+        <label class="form-label mb-1">Pesquisar</label>
+        <input type="text" name="search" value="@search" class="form-control" placeholder="Nome ou descricao" />
+    </div>
+    <div class="col-12 col-lg-3">
+        <label class="form-label mb-1">Estado</label>
+        <select name="status" class="form-select">
+            <option value="active" selected="@(status == "active")">Ativos</option>
+            <option value="inactive" selected="@(status == "inactive")">Inativos</option>
+            <option value="all" selected="@(status == "all")">Todos</option>
+        </select>
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Limpar</a>
     </div>
 </form>
 
@@ -21,9 +49,9 @@
         <thead class="table-light">
             <tr>
                 <th>Nome</th>
-                <th>Descrição</th>
+                <th>Descricao</th>
                 <th>Unidade</th>
-                <th>Preço</th>
+                <th>Preco</th>
                 <th>IVA</th>
                 <th></th>
             </tr>
@@ -32,9 +60,7 @@
         @if (!Model.Any())
         {
             <tr>
-                <td colspan="6" class="text-center text-muted py-4">
-                    Ainda não existem produtos registados.
-                </td>
+                <td colspan="6" class="text-center text-muted py-4">Ainda nao existem produtos para este filtro.</td>
             </tr>
         }
         else

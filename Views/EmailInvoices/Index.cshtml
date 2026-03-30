@@ -1,0 +1,105 @@
+@model KeepBill.Models.ViewModels.EmailInvoicesViewModel
+@{
+    ViewData["Title"] = "Email Faturas";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+    <form asp-action="Sync" method="post" class="m-0">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-primary">Sincronizar caixa de email</button>
+    </form>
+</div>
+
+@if (!Model.IsConfigured)
+{
+    <div class="alert alert-warning">
+        <strong>Configuracao em falta.</strong><br />
+        @(Model.ConfigurationHint ?? "Define a secao EmailInbox no appsettings ou user-secrets.")
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Emails analisados</p>
+                    <h4 class="mb-0">@Model.TotalEmailsScanned</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Faturas detetadas</p>
+                    <h4 class="mb-0 text-success">@Model.TotalInvoicesDetected</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Ultima sincronizacao</p>
+                    <h6 class="mb-0">@(Model.LastSyncUtc?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "-")</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.LastError))
+    {
+        <div class="alert alert-danger">@Model.LastError</div>
+    }
+
+    <div class="table-responsive shadow-sm bg-white">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Data</th>
+                    <th>Remetente</th>
+                    <th>Assunto</th>
+                    <th>Anexos</th>
+                    <th>Detecao</th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (!Model.Items.Any())
+            {
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">Sem resultados ainda. Clica em "Sincronizar caixa de email".</td>
+                </tr>
+            }
+            else
+            {
+                foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td>@item.ReceivedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>@item.From</td>
+                        <td>@item.Subject</td>
+                        <td>
+                            @item.AttachmentCount
+                            @if (!string.IsNullOrWhiteSpace(item.AttachmentNames))
+                            {
+                                <div class="small text-muted">@item.AttachmentNames</div>
+                            }
+                        </td>
+                        <td>
+                            @if (item.IsInvoice)
+                            {
+                                <span class="badge bg-success">Fatura</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Outro</span>
+                            }
+                            <div class="small text-muted mt-1">@item.DetectionReason</div>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+}

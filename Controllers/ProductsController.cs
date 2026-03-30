@@ -19,16 +19,33 @@ namespace KeepBill.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index(bool? showInactive)
+        public async Task<IActionResult> Index(string? search, string status = "active")
         {
-            var includeInactive = showInactive ?? false;
-            var items = await _context.Products
-                .AsNoTracking()
-                .Where(p => includeInactive || p.IsActive)
-                .OrderBy(p => p.Name)
-                .ToListAsync();
+            IQueryable<Product> query = _context.Products.AsNoTracking();
 
-            ViewData["ShowInactive"] = includeInactive;
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(p =>
+                    EF.Functions.ILike(p.Name, $"%{term}%") ||
+                    (p.Description != null && EF.Functions.ILike(p.Description, $"%{term}%")));
+            }
+
+            status = (status ?? "active").ToLowerInvariant();
+            query = status switch
+            {
+                "inactive" => query.Where(p => !p.IsActive),
+                "all" => query,
+                _ => query.Where(p => p.IsActive)
+            };
+
+            var items = await query.OrderBy(p => p.Name).ToListAsync();
+
+            ViewData["Search"] = search;
+            ViewData["Status"] = status;
+            ViewData["TotalProducts"] = await _context.Products.CountAsync();
+            ViewData["ActiveProducts"] = await _context.Products.CountAsync(p => p.IsActive);
+            ViewData["InactiveProducts"] = await _context.Products.CountAsync(p => !p.IsActive);
             return View(items);
         }
 

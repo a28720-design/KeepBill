@@ -3,6 +3,7 @@
     var invoice = ViewData["Invoice"] as KeepBill.Models.Invoice;
     ViewData["Title"] = $"Registar pagamento - {invoice?.Number}";
     var methods = ViewBag.Methods as SelectList;
+    var remainingAmount = ViewData["RemainingAmount"] is decimal remaining ? remaining : 0m;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -17,6 +18,8 @@
             <dd class="col-sm-9">@invoice?.Customer?.Name</dd>
             <dt class="col-sm-3">Total</dt>
             <dd class="col-sm-9">@invoice?.GrandTotal.ToString("C")</dd>
+            <dt class="col-sm-3">Em falta</dt>
+            <dd class="col-sm-9">@remainingAmount.ToString("C")</dd>
         </dl>
     </div>
 </div>

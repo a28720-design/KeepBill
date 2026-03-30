@@ -37,6 +37,22 @@ namespace KeepBill.Controllers
                     .SumAsync(p => p.Amount)
             };
 
+            vm.OverdueInvoices = await _context.Invoices
+                .AsNoTracking()
+                .CountAsync(i =>
+                    i.DueDate < today &&
+                    i.Status != InvoiceStatus.Paid &&
+                    i.Status != InvoiceStatus.Cancelled);
+
+            vm.OverdueAmount = await _context.Invoices
+                .AsNoTracking()
+                .Where(i =>
+                    i.DueDate < today &&
+                    i.Status != InvoiceStatus.Paid &&
+                    i.Status != InvoiceStatus.Cancelled)
+                .Select(i => i.GrandTotal - ((decimal?)i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m))
+                .SumAsync();
+
             vm.UpcomingInvoices = await _context.Invoices
                 .AsNoTracking()
                 .Include(i => i.Customer)
@@ -48,6 +64,23 @@ namespace KeepBill.Controllers
                     Id = i.Id,
                     Number = i.Number,
                     CustomerName = i.Customer != null ? i.Customer.Name : "—",
+                    DueDate = i.DueDate,
+                    Balance = i.GrandTotal - ((decimal?)i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m),
+                    Status = i.Status
+                })
+                .ToListAsync();
+
+            vm.OverdueInvoiceCards = await _context.Invoices
+                .AsNoTracking()
+                .Include(i => i.Customer)
+                .Where(i => i.Status != InvoiceStatus.Paid && i.Status != InvoiceStatus.Cancelled && i.DueDate < today)
+                .OrderBy(i => i.DueDate)
+                .Take(5)
+                .Select(i => new InvoiceCard
+                {
+                    Id = i.Id,
+                    Number = i.Number,
+                    CustomerName = i.Customer != null ? i.Customer.Name : "-",
                     DueDate = i.DueDate,
                     Balance = i.GrandTotal - ((decimal?)i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m),
                     Status = i.Status

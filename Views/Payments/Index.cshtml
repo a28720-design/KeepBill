@@ -1,0 +1,110 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model IEnumerable<KeepBill.Models.Payment>
+@{
+    ViewData["Title"] = "Pagamentos";
+    var search = ViewData["Search"] as string;
+    var selectedMethod = ViewData["SelectedMethod"] as string;
+    var from = ViewData["From"] as string;
+    var to = ViewData["To"] as string;
+    var methods = ViewBag.Methods as SelectList;
+    var paymentCount = ViewData["PaymentCount"] is int count ? count : 0;
+    var paymentTotal = ViewData["PaymentTotal"] is decimal total ? total : 0m;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+    <a asp-action="ExportCsv" asp-route-search="@search" asp-route-method="@selectedMethod" asp-route-from="@from" asp-route-to="@to" class="btn btn-outline-secondary">Exportar CSV</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted mb-1">Pagamentos no filtro</p>
+                <h4 class="mb-0">@paymentCount</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted mb-1">Montante total</p>
+                <h4 class="mb-0">@paymentTotal.ToString("C")</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-12 col-lg-4">
+        <label class="form-label mb-1">Pesquisar</label>
+        <input type="text" name="search" value="@search" class="form-control" placeholder="Referencia, n. fatura ou cliente" />
+    </div>
+    <div class="col-12 col-lg-2">
+        <label class="form-label mb-1">Metodo</label>
+        <select name="method" class="form-select">
+            <option value="">Todos</option>
+            @if (methods != null)
+            {
+                foreach (var item in methods)
+                {
+                    <option value="@item.Value" selected="@(selectedMethod == item.Value ? "selected" : null)">@item.Text</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="col-6 col-lg-2">
+        <label class="form-label mb-1">Data de</label>
+        <input type="date" name="from" value="@from" class="form-control" />
+    </div>
+    <div class="col-6 col-lg-2">
+        <label class="form-label mb-1">Data ate</label>
+        <input type="date" name="to" value="@to" class="form-control" />
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Limpar</a>
+    </div>
+</form>
+
+<div class="table-responsive shadow-sm bg-white">
+    <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Data</th>
+                <th>Fatura</th>
+                <th>Cliente</th>
+                <th>Metodo</th>
+                <th>Referencia</th>
+                <th class="text-end">Valor</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">Ainda nao existem pagamentos.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var payment in Model)
+            {
+                <tr>
+                    <td>@payment.PaidAt.ToString("dd/MM/yyyy")</td>
+                    <td>@payment.Invoice?.Number</td>
+                    <td>@payment.Invoice?.Customer?.Name</td>
+                    <td>@payment.Method</td>
+                    <td>@payment.Reference</td>
+                    <td class="text-end">@payment.Amount.ToString("C")</td>
+                    <td class="text-end">
+                        <a asp-controller="Invoices" asp-action="Details" asp-route-id="@payment.InvoiceId" class="btn btn-sm btn-outline-secondary">Ver fatura</a>
+                        <a asp-action="Delete" asp-route-id="@payment.Id" class="btn btn-sm btn-outline-danger">Eliminar</a>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

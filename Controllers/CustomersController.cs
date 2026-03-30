@@ -3,9 +3,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using KeepBill.Data;
 using KeepBill.Models;
+using KeepBill.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace KeepBill.Controllers
 {
@@ -13,10 +15,12 @@ namespace KeepBill.Controllers
     public class CustomersController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public CustomersController(ApplicationDbContext context)
+        public CustomersController(ApplicationDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         public async Task<IActionResult> Index(string? search)
@@ -34,6 +38,7 @@ namespace KeepBill.Controllers
 
             var customers = await query.OrderBy(c => c.Name).ToListAsync();
             ViewData["Search"] = search;
+            ViewData["IsAdmin"] = IsCurrentUserAdmin();
             return View(customers);
         }
 
@@ -52,11 +57,52 @@ namespace KeepBill.Controllers
                 return NotFound();
             }
 
-            return View(customer);
+            var recentInvoices = await _context.Invoices
+                .AsNoTracking()
+                .Include(i => i.Payments)
+                .Where(i => i.CustomerId == customer.Id)
+                .OrderByDescending(i => i.IssueDate)
+                .Take(8)
+                .Select(i => new CustomerInvoiceSummary
+                {
+                    Id = i.Id,
+                    Number = i.Number,
+                    IssueDate = i.IssueDate,
+                    DueDate = i.DueDate,
+                    Status = i.Status,
+                    Total = i.GrandTotal,
+                    Paid = i.Payments.Sum(p => p.Amount),
+                    Balance = i.GrandTotal - i.Payments.Sum(p => p.Amount)
+                })
+                .ToListAsync();
+
+            var totals = await _context.Invoices
+                .AsNoTracking()
+                .Include(i => i.Payments)
+                .Where(i => i.CustomerId == customer.Id)
+                .Select(i => new
+                {
+                    i.GrandTotal,
+                    Paid = i.Payments.Sum(p => p.Amount)
+                })
+                .ToListAsync();
+
+            var vm = new CustomerDetailsViewModel
+            {
+                Customer = customer,
+                TotalInvoices = totals.Count,
+                TotalInvoiced = totals.Sum(x => x.GrandTotal),
+                TotalPaid = totals.Sum(x => x.Paid),
+                OutstandingBalance = totals.Sum(x => x.GrandTotal - x.Paid),
+                RecentInvoices = recentInvoices
+            };
+
+            return View(vm);
         }
 
         public IActionResult Create()
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
             return View(new Customer());
         }
 
@@ -64,6 +110,8 @@ namespace KeepBill.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(Customer customer)
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
+
             if (!ModelState.IsValid)
             {
                 return View(customer);
@@ -78,6 +126,8 @@ namespace KeepBill.Controllers
 
         public async Task<IActionResult> Edit(Guid? id)
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
+
             if (id == null)
             {
                 return NotFound();
@@ -95,6 +145,8 @@ namespace KeepBill.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(Guid id, Customer formModel)
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
+
             if (id != formModel.Id)
             {
                 return NotFound();
@@ -128,6 +180,8 @@ namespace KeepBill.Controllers
 
         public async Task<IActionResult> Delete(Guid? id)
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
+
             if (id == null)
             {
                 return NotFound();
@@ -148,6 +202,8 @@ namespace KeepBill.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(Guid id)
         {
+            if (!IsCurrentUserAdmin()) return Forbid();
+
             var customer = await _context.Customers.FindAsync(id);
             if (customer == null)
             {
@@ -158,6 +214,18 @@ namespace KeepBill.Controllers
             await _context.SaveChangesAsync();
             TempData["Toast"] = "Cliente eliminado.";
             return RedirectToAction(nameof(Index));
+        }
+
+        private bool IsCurrentUserAdmin()
+        {
+            var currentEmail = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(currentEmail))
+            {
+                return false;
+            }
+
+            var adminEmails = _configuration.GetSection("Administration:AdminEmails").Get<string[]>() ?? Array.Empty<string>();
+            return adminEmails.Any(a => string.Equals(a, currentEmail, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

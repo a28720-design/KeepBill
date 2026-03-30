@@ -1,35 +1,57 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+﻿@inject IConfiguration Configuration
+<!DOCTYPE html>
+<html lang="pt">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - KeepBill</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/KeepBill.styles.css" asp-append-version="true" />
 </head>
-<body>
+<body class="app-body">
+    @{
+        var currentEmail = User?.Identity?.Name;
+        var adminEmails = Configuration.GetSection("Administration:AdminEmails").Get<string[]>() ?? Array.Empty<string>();
+        var isAdmin = !string.IsNullOrWhiteSpace(currentEmail) &&
+                      adminEmails.Any(a => string.Equals(a, currentEmail, StringComparison.OrdinalIgnoreCase));
+    }
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand fw-bold text-primary" asp-area="" asp-controller="Home" asp-action="Index">KeepBill</a>
+        <nav class="navbar navbar-expand-lg navbar-light app-navbar mb-4">
+            <div class="container app-container">
+                <a class="navbar-brand fw-bold app-brand" asp-area="" asp-controller="Home" asp-action="Index">KeepBill</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between align-items-center">
+                    <ul class="navbar-nav flex-grow-1 app-nav-list">
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
+                            <a class="nav-link app-nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
+                        </li>
+                        @if (isAdmin)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link app-nav-link" asp-controller="Customers" asp-action="Index">Clientes</a>
+                            </li>
+                        }
+                        <li class="nav-item">
+                            <a class="nav-link app-nav-link" asp-controller="Products" asp-action="Index">Produtos</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-controller="Customers" asp-action="Index">Clientes</a>
+                            <a class="nav-link app-nav-link" asp-controller="Invoices" asp-action="Index">Faturas</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-controller="Products" asp-action="Index">Produtos</a>
+                            <a class="nav-link app-nav-link" asp-controller="Payments" asp-action="Index">Pagamentos</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-controller="Invoices" asp-action="Index">Faturas</a>
+                            <a class="nav-link app-nav-link" asp-controller="Reports" asp-action="Index">Relatorios</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link app-nav-link" asp-controller="EmailInvoices" asp-action="Index">Email Faturas</a>
                         </li>
                     </ul>
                     <partial name="_LoginPartial" />
@@ -37,16 +59,16 @@
             </div>
         </nav>
     </header>
-    <div class="container">
-        <main role="main" class="pb-3">
+    <div class="container app-container">
+        <main role="main" class="pb-4">
             @RenderBody()
         </main>
     </div>
     <partial name="_Toast" />
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - KeepBill - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+    <footer class="footer text-muted">
+        <div class="container app-container">
+            &copy; 2026 KeepBill - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacidade</a>
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

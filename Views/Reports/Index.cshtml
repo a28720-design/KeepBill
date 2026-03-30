@@ -1,0 +1,148 @@
+@model KeepBill.Models.ViewModels.ReportsViewModel
+@{
+    ViewData["Title"] = "Relatorios";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-6 col-md-3">
+        <label class="form-label mb-1">Data inicio</label>
+        <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" />
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label mb-1">Data fim</label>
+        <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" />
+    </div>
+    <div class="col-12 col-md-auto">
+        <button type="submit" class="btn btn-primary">Atualizar</button>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Faturado no periodo</p>
+                <h4 class="mb-0">@Model.InvoicedTotal.ToString("C")</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Recebido no periodo</p>
+                <h4 class="mb-0">@Model.ReceivedTotal.ToString("C")</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Faturas emitidas</p>
+                <h4 class="mb-0">@Model.IssuedInvoices</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Novos clientes</p>
+                <h4 class="mb-0">@Model.NewCustomers</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card h-100 border-danger-subtle">
+            <div class="card-body">
+                <p class="text-muted mb-1">Em atraso</p>
+                <h4 class="mb-0 text-danger">@Model.OverdueTotal.ToString("C")</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Evolucao mensal</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mes</th>
+                            <th>Faturado</th>
+                            <th>Recebido</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (!Model.MonthlyBreakdown.Any())
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">Sem dados no periodo.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var item in Model.MonthlyBreakdown)
+                        {
+                            var monthDate = new DateTime(item.Year, item.Month, 1);
+                            <tr>
+                                <td>@monthDate.ToString("MMMM yyyy")</td>
+                                <td>@item.Invoiced.ToString("C")</td>
+                                <td>@item.Received.ToString("C")</td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Top clientes</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Faturas</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (!Model.TopCustomers.Any())
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">Sem dados no periodo.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var customer in Model.TopCustomers)
+                        {
+                            <tr>
+                                <td>
+                                    <a asp-controller="Customers" asp-action="Details" asp-route-id="@customer.CustomerId">@customer.CustomerName</a>
+                                </td>
+                                <td>@customer.InvoiceCount</td>
+                                <td>@customer.InvoicedTotal.ToString("C")</td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-white">
+                <small class="text-muted">Saldo aberto global: @Model.OutstandingTotal.ToString("C")</small>
+            </div>
+        </div>
+    </div>
+</div>

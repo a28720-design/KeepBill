@@ -9,8 +9,11 @@ namespace KeepBill.Models.ViewModels
         public int ActiveProducts { get; set; }
         public int InvoicesIssued { get; set; }
         public decimal OutstandingAmount { get; set; }
+        public int OverdueInvoices { get; set; }
+        public decimal OverdueAmount { get; set; }
         public decimal PaidThisMonth { get; set; }
         public IReadOnlyList<InvoiceCard> UpcomingInvoices { get; set; } = Array.Empty<InvoiceCard>();
+        public IReadOnlyList<InvoiceCard> OverdueInvoiceCards { get; set; } = Array.Empty<InvoiceCard>();
         public IReadOnlyList<StatusSummary> MonthlySummary { get; set; } = Array.Empty<StatusSummary>();
     }
 

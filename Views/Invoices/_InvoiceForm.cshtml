@@ -3,6 +3,8 @@
     var customers = ViewBag.Customers as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
     var statuses = ViewBag.Statuses as SelectList ?? new SelectList(Enum.GetValues(typeof(KeepBill.Models.InvoiceStatus)));
     var products = ViewBag.Products as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var lockCustomer = ViewData["LockCustomer"] is bool lc && lc;
+    var lockedCustomerName = ViewData["LockedCustomerName"] as string;
 }
 
 <div class="row g-3">
@@ -13,9 +15,17 @@
     </div>
     <div class="col-md-4">
         <label asp-for="Invoice.CustomerId" class="form-label">Cliente</label>
-        <select asp-for="Invoice.CustomerId" class="form-select" asp-items="customers">
-            <option value="">-- Selecionar --</option>
-        </select>
+        @if (lockCustomer)
+        {
+            <input type="hidden" asp-for="Invoice.CustomerId" />
+            <input class="form-control" value="@lockedCustomerName" readonly />
+        }
+        else
+        {
+            <select asp-for="Invoice.CustomerId" class="form-select" asp-items="customers">
+                <option value="">-- Selecionar --</option>
+            </select>
+        }
         <span asp-validation-for="Invoice.CustomerId" class="text-danger"></span>
     </div>
     <div class="col-md-2">
