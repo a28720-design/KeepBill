@@ -40,6 +40,13 @@ builder.Services.AddScoped<IUserEmailInboxSettingsService, UserEmailInboxSetting
 
 var app = builder.Build();
 
+// Ensure database schema is up to date in hosted environments (e.g., Render).
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

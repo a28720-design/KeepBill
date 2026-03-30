@@ -52,6 +52,19 @@
                  data-logo_alignment="left">
             </div>
         </div>
+
+        @if (Model.ExternalLogins != null && Model.ExternalLogins.Count > 0)
+        {
+            var googleProvider = Model.ExternalLogins.FirstOrDefault(p => p.Name == "Google");
+            if (googleProvider != null)
+            {
+                <form asp-page="./ExternalLogin" asp-route-returnUrl="@Model.ReturnUrl" method="post" class="mt-2">
+                    <button type="submit" class="btn btn-outline-secondary w-100 py-2" name="provider" value="@googleProvider.Name" title="Entrar com Google">
+                        Continuar com Google
+                    </button>
+                </form>
+            }
+        }
     }
     else if (Model.ExternalLogins != null && Model.ExternalLogins.Count > 0)
     {
