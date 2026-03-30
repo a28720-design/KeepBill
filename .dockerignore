@@ -1,0 +1,12 @@
+.git
+.gitignore
+.vs
+bin
+obj
+artifacts
+.appdata
+*.user
+*.suo
+*.cache
+*.md
+README.md
