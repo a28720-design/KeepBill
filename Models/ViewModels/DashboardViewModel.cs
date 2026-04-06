@@ -6,7 +6,6 @@ namespace KeepBill.Models.ViewModels
     public class DashboardViewModel
     {
         public int TotalCustomers { get; set; }
-        public int ActiveProducts { get; set; }
         public int InvoicesIssued { get; set; }
         public decimal OutstandingAmount { get; set; }
         public int OverdueInvoices { get; set; }

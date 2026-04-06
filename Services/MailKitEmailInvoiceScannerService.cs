@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,11 +18,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using UglyToad.PdfPig;
 
 namespace KeepBill.Services
 {
     public class MailKitEmailInvoiceScannerService : IEmailInvoiceScannerService
     {
+        private static readonly string[] CommonInvoiceCategories =
+        {
+            "Utilidades", "Telecomunicacoes", "Software", "Renda", "Transporte", "Seguros", "Impostos", "Compras", "Outros"
+        };
+
         private readonly EmailInboxOptions _options;
         private readonly ApplicationDbContext _context;
         private readonly ILogger<MailKitEmailInvoiceScannerService> _logger;
@@ -50,7 +57,7 @@ namespace KeepBill.Services
                 _lastResult = new EmailInvoicesViewModel
                 {
                     IsConfigured = false,
-                    ConfigurationHint = "Configura a secao EmailInbox no appsettings/user-secrets com Host, Username e Password."
+                    ConfigurationHint = "Configura a secao EmailInbox com Host, Username e Password."
                 };
                 return _lastResult;
             }
@@ -89,14 +96,19 @@ namespace KeepBill.Services
                 foreach (var uid in selectedUids)
                 {
                     var message = await inbox.GetMessageAsync(uid, cancellationToken);
-                    var item = BuildItem(message, options);
-                    items.Add(item);
+                    items.Add(await BuildItemAsync(message, options, cancellationToken));
                 }
 
                 result.Items = items.OrderByDescending(i => i.ReceivedAtUtc).ToList();
                 result.TotalEmailsScanned = result.Items.Count;
                 result.TotalInvoicesDetected = result.Items.Count(i => i.IsInvoice);
-                await ImportDetectedInvoicesAsync(result.Items.Where(i => i.IsInvoice).ToList(), cancellationToken, result, options, ownerCustomerId);
+
+                await ImportDetectedInvoicesAsync(
+                    result.Items.Where(i => i.IsInvoice).ToList(),
+                    cancellationToken,
+                    result,
+                    options,
+                    ownerCustomerId);
 
                 await client.DisconnectAsync(true, cancellationToken);
             }
@@ -110,17 +122,21 @@ namespace KeepBill.Services
             return result;
         }
 
-        private EmailInvoiceItemViewModel BuildItem(MimeMessage message, EmailInboxOptions options)
+        private async Task<EmailInvoiceItemViewModel> BuildItemAsync(
+            MimeMessage message,
+            EmailInboxOptions options,
+            CancellationToken cancellationToken)
         {
             var mailbox = message.From.Mailboxes.FirstOrDefault();
-            var attachments = message.Attachments
-                .OfType<MimePart>()
-                .Select(a => a.FileName ?? "anexo")
-                .ToList();
-
             var subject = message.Subject ?? string.Empty;
             var textBody = GetMessageText(message);
-            var detection = DetectInvoice(subject, textBody, attachments, options);
+            var attachmentData = await ReadAttachmentsAsync(message, cancellationToken);
+            var attachmentNames = attachmentData.Select(a => a.FileName).ToList();
+            var attachmentText = string.Join(Environment.NewLine, attachmentData.Select(a => a.ExtractedText).Where(t => !string.IsNullOrWhiteSpace(t)));
+
+            var parseSource = $"{subject}\n{textBody}\n{attachmentText}";
+            var parsedAmount = ParseTotalAmount(parseSource);
+            var detection = DetectInvoice(message, subject, textBody, attachmentNames, attachmentText, options, parsedAmount);
 
             return new EmailInvoiceItemViewModel
             {
@@ -132,50 +148,123 @@ namespace KeepBill.Services
                 ReceivedAtUtc = message.Date.UtcDateTime,
                 IsInvoice = detection.isInvoice,
                 DetectionReason = detection.reason,
-                AttachmentCount = attachments.Count,
-                AttachmentNames = string.Join(", ", attachments.Take(8)),
-                ParsedTotalAmount = ParseTotalAmount(subject, textBody)
+                AttachmentCount = attachmentNames.Count,
+                AttachmentNames = string.Join(", ", attachmentNames.Take(10)),
+                ParsedTotalAmount = parsedAmount,
+                ParsedInvoiceNumber = detection.invoiceNumber,
+                DetectedCategory = detection.category,
+                SourceLiteral = detection.sourceLiteral
             };
         }
 
-        private (bool isInvoice, string reason) DetectInvoice(string subject, string textBody, List<string> attachmentNames, EmailInboxOptions options)
+        private (bool isInvoice, string reason, string invoiceNumber, string category, string sourceLiteral) DetectInvoice(
+            MimeMessage message,
+            string subject,
+            string textBody,
+            List<string> attachmentNames,
+            string attachmentText,
+            EmailInboxOptions options,
+            decimal? parsedAmount)
         {
+            var combined = $"{subject}\n{textBody}\n{string.Join(' ', attachmentNames)}\n{attachmentText}";
+            var combinedLower = combined.ToLowerInvariant();
             var keywords = options.InvoiceKeywords.Select(k => k.ToLowerInvariant()).ToArray();
-            var subjectLower = subject.ToLowerInvariant();
-            var bodyLower = textBody.ToLowerInvariant();
-            var attachmentLower = string.Join(" ", attachmentNames).ToLowerInvariant();
 
-            var keywordInSubject = keywords.Any(k => subjectLower.Contains(k));
-            var keywordInBody = keywords.Any(k => bodyLower.Contains(k));
-            var keywordInAttachment = keywords.Any(k => attachmentLower.Contains(k));
-            var hasTypicalAttachment = attachmentNames.Any(a =>
+            var keywordInSubject = keywords.Any(k => subject.Contains(k, StringComparison.OrdinalIgnoreCase));
+            var keywordInBody = keywords.Any(k => textBody.Contains(k, StringComparison.OrdinalIgnoreCase));
+            var keywordInAttachmentName = keywords.Any(k => attachmentNames.Any(a => a.Contains(k, StringComparison.OrdinalIgnoreCase)));
+            var keywordInAttachmentText = keywords.Any(k => attachmentText.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+            var hasPdfOrXmlAttachment = attachmentNames.Any(a =>
                 a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
                 a.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
 
-            if (keywordInSubject && hasTypicalAttachment)
-                return (true, "Palavra-chave no assunto + anexo PDF/XML");
-            if (keywordInAttachment)
-                return (true, "Palavra-chave no nome do anexo");
-            if (keywordInSubject || keywordInBody)
-                return (true, "Palavra-chave encontrada no email");
-            if (hasTypicalAttachment)
-                return (true, "Anexo com formato tipico de fatura");
+            var hasInvoiceLikeAttachmentName = attachmentNames.Any(a =>
+                Regex.IsMatch(a, @"\b(fatura|factura|invoice|recibo|ft|fa)\b", RegexOptions.IgnoreCase));
 
-            return (false, "Sem padrao claro de fatura");
+            var invoiceNumber = ExtractInvoiceNumber(combined);
+            var hasInvoiceNumber = !string.IsNullOrWhiteSpace(invoiceNumber);
+            var hasAmount = parsedAmount.HasValue && parsedAmount.Value > 0m;
+            var hasTaxSignals = ContainsAny(combinedLower, "nif", "vat", "iva", "subtotal", "total", "taxa");
+
+            var hasListUnsubscribe = message.Headers.Any(h => h.Field.Equals("List-Unsubscribe", StringComparison.OrdinalIgnoreCase));
+            var hasMarketingSignals = ContainsAny(
+                combinedLower,
+                "newsletter", "unsubscribe", "campanha", "promocao", "promo", "desconto", "black friday", "oferta", "cupao", "cupom", "deal");
+            var hasNoReplySender = (message.From.ToString() ?? string.Empty).Contains("noreply", StringComparison.OrdinalIgnoreCase)
+                                   || (message.From.ToString() ?? string.Empty).Contains("no-reply", StringComparison.OrdinalIgnoreCase);
+
+            var spamPenalty = 0;
+            if (hasListUnsubscribe) spamPenalty += 3;
+            if (hasMarketingSignals) spamPenalty += 3;
+            if (hasNoReplySender) spamPenalty += 1;
+
+            var score = 0;
+            if (keywordInSubject) score += 3;
+            if (keywordInBody) score += 2;
+            if (keywordInAttachmentName) score += 2;
+            if (keywordInAttachmentText) score += 3;
+            if (hasPdfOrXmlAttachment) score += 2;
+            if (hasInvoiceLikeAttachmentName) score += 3;
+            if (hasInvoiceNumber) score += 3;
+            if (hasAmount) score += 2;
+            if (hasTaxSignals) score += 2;
+            score -= spamPenalty;
+
+            var minimumEvidence = hasInvoiceNumber || (hasAmount && hasTaxSignals) || (hasInvoiceLikeAttachmentName && hasPdfOrXmlAttachment);
+            var isInvoice = score >= 7 && minimumEvidence;
+
+            var reasonParts = new List<string>();
+            if (keywordInSubject) reasonParts.Add("keyword assunto");
+            if (keywordInBody) reasonParts.Add("keyword corpo");
+            if (keywordInAttachmentName) reasonParts.Add("keyword nome anexo");
+            if (keywordInAttachmentText) reasonParts.Add("keyword texto anexo");
+            if (hasPdfOrXmlAttachment) reasonParts.Add("anexo PDF/XML");
+            if (hasInvoiceLikeAttachmentName) reasonParts.Add("anexo com nome de fatura");
+            if (hasInvoiceNumber) reasonParts.Add($"numero {invoiceNumber}");
+            if (hasAmount) reasonParts.Add($"valor {parsedAmount:0.00} EUR");
+            if (hasTaxSignals) reasonParts.Add("sinais fiscais");
+            if (spamPenalty > 0) reasonParts.Add($"anti-lixo -{spamPenalty}");
+            reasonParts.Add($"score {score}");
+
+            if (!isInvoice && spamPenalty >= 4)
+            {
+                reasonParts.Add("marcado como newsletter/anuncio");
+            }
+
+            var category = DetectCategory(combined);
+            if (!CommonInvoiceCategories.Contains(category, StringComparer.OrdinalIgnoreCase))
+            {
+                category = "Outros";
+            }
+
+            var sourceLiteral = ExtractSourceLiteral(subject, textBody, attachmentText, attachmentNames, invoiceNumber);
+
+            return (
+                isInvoice,
+                reasonParts.Count == 0 ? "Sem sinais de fatura" : string.Join(" | ", reasonParts),
+                invoiceNumber,
+                category,
+                sourceLiteral);
         }
 
         private static string GetMessageText(MimeMessage message)
         {
             if (!string.IsNullOrWhiteSpace(message.TextBody))
+            {
                 return message.TextBody;
+            }
 
             if (string.IsNullOrWhiteSpace(message.HtmlBody))
+            {
                 return string.Empty;
+            }
 
-            return Regex.Replace(message.HtmlBody, "<.*?>", " ");
+            var withoutTags = Regex.Replace(message.HtmlBody, "<.*?>", " ");
+            return Regex.Replace(withoutTags, @"\s+", " ").Trim();
         }
 
-        private bool IsConfigured(EmailInboxOptions options)
+        private static bool IsConfigured(EmailInboxOptions options)
         {
             return !string.IsNullOrWhiteSpace(options.Host)
                    && !string.IsNullOrWhiteSpace(options.Username)
@@ -234,6 +323,11 @@ namespace KeepBill.Services
                 var issueDate = item.ReceivedAtUtc == default ? utcNow.Date : item.ReceivedAtUtc.Date;
                 var total = item.ParsedTotalAmount.GetValueOrDefault(0m);
                 var subtotal = total < 0 ? 0m : total;
+                var literal = string.IsNullOrWhiteSpace(item.SourceLiteral) ? item.Subject : item.SourceLiteral;
+                if (string.IsNullOrWhiteSpace(literal))
+                {
+                    literal = "Fatura importada do email";
+                }
 
                 var invoice = new Invoice
                 {
@@ -253,7 +347,7 @@ namespace KeepBill.Services
 
                 invoice.Lines.Add(new InvoiceLine
                 {
-                    Description = string.IsNullOrWhiteSpace(item.Subject) ? "Fatura importada do email" : item.Subject.Trim(),
+                    Description = TrimToMaxLength(literal, 200),
                     Quantity = 1m,
                     UnitPrice = subtotal,
                     VatRate = 0m,
@@ -292,15 +386,13 @@ namespace KeepBill.Services
                 }
             }
 
-            var displayName = string.Empty;
-            if (string.IsNullOrWhiteSpace(displayName) && !string.IsNullOrWhiteSpace(normalizedEmail))
-            {
-                displayName = normalizedEmail.Split('@')[0];
-            }
+            var displayName = string.IsNullOrWhiteSpace(normalizedEmail)
+                ? "Cliente email"
+                : normalizedEmail.Split('@')[0];
 
             var customer = new Customer
             {
-                Name = string.IsNullOrWhiteSpace(displayName) ? "Cliente email" : displayName,
+                Name = displayName,
                 Email = normalizedEmail,
                 Notes = "Criado automaticamente pela sincronizacao de email.",
                 CreatedAt = utcNow,
@@ -334,8 +426,15 @@ namespace KeepBill.Services
             var lines = new List<string>
             {
                 "Importado automaticamente do email.",
-                $"Detecao: {item.DetectionReason}"
+                $"Categoria: {item.DetectedCategory}",
+                $"Detecao: {item.DetectionReason}",
+                $"Origem literal: {item.SourceLiteral}"
             };
+
+            if (!string.IsNullOrWhiteSpace(item.ParsedInvoiceNumber))
+            {
+                lines.Add($"Numero identificado: {item.ParsedInvoiceNumber}");
+            }
 
             if (!string.IsNullOrWhiteSpace(item.MessageId))
             {
@@ -347,6 +446,11 @@ namespace KeepBill.Services
                 lines.Add($"Remetente: {item.From}");
             }
 
+            if (!string.IsNullOrWhiteSpace(item.Subject))
+            {
+                lines.Add($"Assunto: {item.Subject}");
+            }
+
             if (!string.IsNullOrWhiteSpace(item.AttachmentNames))
             {
                 lines.Add($"Anexos: {item.AttachmentNames}");
@@ -355,9 +459,8 @@ namespace KeepBill.Services
             return string.Join(Environment.NewLine, lines);
         }
 
-        private static decimal? ParseTotalAmount(string subject, string textBody)
+        private static decimal? ParseTotalAmount(string source)
         {
-            var source = $"{subject} {textBody}";
             if (string.IsNullOrWhiteSpace(source))
             {
                 return null;
@@ -384,12 +487,202 @@ namespace KeepBill.Services
                 }
             }
 
-            if (parsed.Count == 0)
+            return parsed.Count == 0 ? null : parsed.Max();
+        }
+
+        private static string ExtractInvoiceNumber(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
             {
-                return null;
+                return string.Empty;
             }
 
-            return parsed.Max();
+            var patterns = new[]
+            {
+                @"\b(?:fatura|factura|invoice|inv|ft|fa|recibo)\s*(?:n[oº.]?|#|num(?:ero)?)?\s*[:\-]?\s*([A-Z0-9\-/]{4,})\b",
+                @"\b(?:no|n[oº.]?)\s*[:\-]?\s*([A-Z0-9\-/]{5,})\b"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = Regex.Match(source, pattern, RegexOptions.IgnoreCase);
+                if (match.Success && match.Groups.Count > 1)
+                {
+                    return match.Groups[1].Value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string ExtractSourceLiteral(
+            string subject,
+            string body,
+            string attachmentText,
+            List<string> attachmentNames,
+            string invoiceNumber)
+        {
+            var lines = $"{body}\n{attachmentText}"
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => Regex.Replace(l.Trim(), @"\s+", " "))
+                .Where(l => !string.IsNullOrWhiteSpace(l) && l.Length > 8)
+                .Take(400)
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(invoiceNumber))
+            {
+                var byNumber = lines.FirstOrDefault(l => l.Contains(invoiceNumber, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(byNumber))
+                {
+                    return byNumber;
+                }
+            }
+
+            var byInvoiceSignal = lines.FirstOrDefault(l =>
+                l.Contains("fatura", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("invoice", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("recibo", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("nif", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("total", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(byInvoiceSignal))
+            {
+                return byInvoiceSignal;
+            }
+
+            if (!string.IsNullOrWhiteSpace(subject))
+            {
+                return subject.Trim();
+            }
+
+            var firstAttachment = attachmentNames.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(firstAttachment))
+            {
+                return firstAttachment;
+            }
+
+            return "Fatura importada do email";
+        }
+
+        private static string DetectCategory(string source)
+        {
+            var text = source.ToLowerInvariant();
+
+            if (ContainsAny(text, "eletricidade", "energia", "agua", "water", "gas", "luz", "edp", "galp", "endesa")) return "Utilidades";
+            if (ContainsAny(text, "internet", "telecom", "vodafone", "meo", "nos", "telefone", "fibra", "movel")) return "Telecomunicacoes";
+            if (ContainsAny(text, "software", "licenca", "subscription", "saas", "adobe", "microsoft", "google workspace", "openai", "chatgpt")) return "Software";
+            if (ContainsAny(text, "renda", "arrendamento", "condominio", "rent", "imovel", "escritorio")) return "Renda";
+            if (ContainsAny(text, "combustivel", "fuel", "gasolina", "diesel", "portagem", "uber", "bolt", "estacionamento")) return "Transporte";
+            if (ContainsAny(text, "seguro", "insurance", "multirriscos", "saude", "automovel")) return "Seguros";
+            if (ContainsAny(text, "imposto", "at ", "iva", "financas", "tax", "seguranca social")) return "Impostos";
+            if (ContainsAny(text, "material", "office", "papelaria", "fornecedor", "amazon", "compra", "mercearia", "supermercado")) return "Compras";
+
+            return "Outros";
+        }
+
+        private static bool ContainsAny(string source, params string[] terms)
+        {
+            return terms.Any(term => source.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string TrimToMaxLength(string value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var trimmed = value.Trim();
+            return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
+        }
+
+        private async Task<List<AttachmentSummary>> ReadAttachmentsAsync(MimeMessage message, CancellationToken cancellationToken)
+        {
+            var output = new List<AttachmentSummary>();
+            foreach (var attachment in message.Attachments.OfType<MimePart>())
+            {
+                var fileName = attachment.FileName ?? "anexo";
+                var extracted = string.Empty;
+
+                try
+                {
+                    using var ms = new MemoryStream();
+                    await attachment.Content.DecodeToAsync(ms, cancellationToken);
+                    var bytes = ms.ToArray();
+                    extracted = ExtractAttachmentText(fileName, bytes);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Falha a extrair texto do anexo {FileName}.", fileName);
+                }
+
+                output.Add(new AttachmentSummary
+                {
+                    FileName = fileName,
+                    ExtractedText = TrimToMaxLength(extracted, 12000)
+                });
+            }
+
+            return output;
+        }
+
+        private string ExtractAttachmentText(string fileName, byte[] contentBytes)
+        {
+            if (contentBytes.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExtractPdfText(contentBytes);
+            }
+
+            if (fileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                return DecodeAsText(contentBytes);
+            }
+
+            return string.Empty;
+        }
+
+        private string ExtractPdfText(byte[] contentBytes)
+        {
+            try
+            {
+                using var stream = new MemoryStream(contentBytes);
+                using var doc = PdfDocument.Open(stream);
+                var text = string.Join(
+                    Environment.NewLine,
+                    doc.GetPages()
+                        .Take(8)
+                        .Select(p => p.Text)
+                        .Where(t => !string.IsNullOrWhiteSpace(t)));
+                return Regex.Replace(text, @"\s+", " ").Trim();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Falha ao ler texto do PDF. Pode ser PDF digitalizado sem texto embutido.");
+                return string.Empty;
+            }
+        }
+
+        private static string DecodeAsText(byte[] bytes)
+        {
+            var utf8 = Encoding.UTF8.GetString(bytes);
+            if (!string.IsNullOrWhiteSpace(utf8))
+            {
+                return utf8;
+            }
+
+            return Encoding.GetEncoding("iso-8859-1").GetString(bytes);
+        }
+
+        private sealed class AttachmentSummary
+        {
+            public string FileName { get; set; } = string.Empty;
+            public string ExtractedText { get; set; } = string.Empty;
         }
     }
 }

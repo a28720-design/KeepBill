@@ -6,27 +6,45 @@
     <title>@ViewData["Title"] - KeepBill</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body class="auth-body d-flex align-items-center py-4">
     <div class="container auth-container">
-        <div class="row justify-content-center">
-            <div class="col-lg-7 col-xl-5">
-                <div class="card shadow-lg border-0 auth-card">
-                    <div class="card-body p-4 p-md-5">
-                        <div class="auth-branding mb-4">
-                            <span class="auth-badge">Plataforma de faturacao</span>
-                            <h1 class="h3 fw-bold mb-1">KeepBill</h1>
-                            <p class="auth-subtitle mb-0">Gestao de faturacao para o teu negocio.</p>
-                        </div>
-                        @RenderBody()
+        <div class="auth-shell mx-auto">
+            <div class="auth-side-panel">
+                <span class="auth-side-kicker">KeepBill</span>
+                <h1>Fatura com clareza e controlo.</h1>
+                <p>
+                    Centraliza clientes, faturas, pagamentos e importacao por email num so painel simples.
+                </p>
+                <div class="auth-side-metrics">
+                    <div class="auth-side-metric">
+                        <strong>+ Rapido</strong>
+                        <span>Fluxo de faturacao em minutos</span>
+                    </div>
+                    <div class="auth-side-metric">
+                        <strong>+ Organizado</strong>
+                        <span>Categoria automatica de documentos</span>
+                    </div>
+                    <div class="auth-side-metric">
+                        <strong>+ Seguro</strong>
+                        <span>Conta e dados isolados por utilizador</span>
                     </div>
                 </div>
-                <p class="text-center text-white-50 mt-3 small">&copy; @DateTime.UtcNow.Year KeepBill</p>
+            </div>
+
+            <div class="auth-main-panel">
+                <div class="auth-branding mb-3">
+                    <span class="auth-badge">Plataforma de faturacao</span>
+                    <h2 class="auth-main-title mb-1">@ViewData["Title"]</h2>
+                    <p class="auth-subtitle mb-0">Acede e gere tudo num so sitio.</p>
+                </div>
+                @RenderBody()
             </div>
         </div>
+        <p class="text-center text-white-50 mt-3 small">&copy; @DateTime.UtcNow.Year KeepBill</p>
     </div>
 
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
@@ -34,3 +52,4 @@
     @RenderSection("Scripts", required: false)
 </body>
 </html>
+

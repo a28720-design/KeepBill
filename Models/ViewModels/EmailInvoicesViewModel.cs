@@ -30,5 +30,8 @@ namespace KeepBill.Models.ViewModels
         public int AttachmentCount { get; set; }
         public string AttachmentNames { get; set; } = string.Empty;
         public decimal? ParsedTotalAmount { get; set; }
+        public string ParsedInvoiceNumber { get; set; } = string.Empty;
+        public string DetectedCategory { get; set; } = "Outros";
+        public string SourceLiteral { get; set; } = string.Empty;
     }
 }

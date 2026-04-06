@@ -1,4 +1,4 @@
-﻿@inject IConfiguration Configuration
+@inject IConfiguration Configuration
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -7,70 +7,87 @@
     <title>@ViewData["Title"] - KeepBill</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/KeepBill.styles.css" asp-append-version="true" />
 </head>
-<body class="app-body">
+<body class="kb-app-body">
     @{
         var currentEmail = User?.Identity?.Name;
         var adminEmails = Configuration.GetSection("Administration:AdminEmails").Get<string[]>() ?? Array.Empty<string>();
         var isAdmin = !string.IsNullOrWhiteSpace(currentEmail) &&
                       adminEmails.Any(a => string.Equals(a, currentEmail, StringComparison.OrdinalIgnoreCase));
-    }
-    <header>
-        <nav class="navbar navbar-expand-lg navbar-light app-navbar mb-4">
-            <div class="container app-container">
-                <a class="navbar-brand fw-bold app-brand" asp-area="" asp-controller="Home" asp-action="Dashboard">KeepBill</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between align-items-center">
-                    <ul class="navbar-nav flex-grow-1 app-nav-list">
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-controller="Home" asp-action="Dashboard">Dashboard</a>
-                        </li>
-                        @if (isAdmin)
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link app-nav-link" asp-controller="Customers" asp-action="Index">Clientes</a>
-                            </li>
-                        }
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-controller="Products" asp-action="Index">Produtos</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-controller="Invoices" asp-action="Index">Faturas</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-controller="Payments" asp-action="Index">Pagamentos</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-controller="Reports" asp-action="Index">Relatorios</a>
-                        </li>
-                    </ul>
-                    <partial name="_LoginPartial" />
-                </div>
-            </div>
-        </nav>
-    </header>
-    <div class="container app-container">
-        <main role="main" class="pb-4">
-            @RenderBody()
-        </main>
-    </div>
-    <partial name="_Toast" />
 
-    <footer class="footer text-muted">
-        <div class="container app-container">
-            &copy; 2026 KeepBill - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacidade</a>
+        var currentController = (ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home").ToLowerInvariant();
+        var currentAction = (ViewContext.RouteData.Values["action"]?.ToString() ?? "Index").ToLowerInvariant();
+
+        var pageTitle = ViewData["Title"]?.ToString() ?? "KeepBill";
+        var pageDescription = currentController switch
+        {
+            "home" when currentAction == "dashboard" => "Visao central do negocio em tempo real.",
+            "customers" => "Base de clientes pronta para faturacao.",
+            "invoices" => "Gestao completa de faturas e importacao por email.",
+            "payments" => "Registo de recebimentos e reconciliacao.",
+            "reports" => "Indicadores e graficos para decidir melhor.",
+            _ => "Painel de operacao KeepBill."
+        };
+
+        bool IsActive(string controllerName) => string.Equals(currentController, controllerName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    <div class="kb-shell">
+        <header class="kb-headerbar">
+            <a class="kb-brand" asp-area="" asp-controller="Home" asp-action="Dashboard">
+                <span class="kb-brand-mark">KB</span>
+                <span class="kb-brand-text">
+                    <strong>KeepBill</strong>
+                    <small>Faturacao profissional</small>
+                </span>
+            </a>
+
+            <nav class="kb-nav">
+                <a class="kb-nav-link @(IsActive("home") ? "active" : null)" asp-controller="Home" asp-action="Dashboard">Dashboard</a>
+                @if (isAdmin)
+                {
+                    <a class="kb-nav-link @(IsActive("customers") ? "active" : null)" asp-controller="Customers" asp-action="Index">Clientes</a>
+                }
+                <a class="kb-nav-link @(IsActive("invoices") ? "active" : null)" asp-controller="Invoices" asp-action="Index">Faturas</a>
+                <a class="kb-nav-link @(IsActive("payments") ? "active" : null)" asp-controller="Payments" asp-action="Index">Pagamentos</a>
+                <a class="kb-nav-link @(IsActive("reports") ? "active" : null)" asp-controller="Reports" asp-action="Index">Relatorios</a>
+            </nav>
+
+            <div class="kb-head-account">
+                <partial name="_LoginPartial" />
+            </div>
+        </header>
+
+        <div class="kb-main">
+            <header class="kb-top">
+                <div>
+                    <p class="kb-top-kicker mb-1">Area de trabalho</p>
+                    <h1 class="kb-top-title mb-1">@pageTitle</h1>
+                    <p class="kb-top-subtitle mb-0">@pageDescription</p>
+                </div>
+                <a asp-controller="Invoices" asp-action="Create" class="btn btn-primary kb-top-cta">Nova fatura</a>
+            </header>
+
+            <main role="main" class="kb-content">
+                @RenderBody()
+            </main>
+
+            <footer class="kb-footer">
+                <span>&copy; 2026 KeepBill</span>
+                <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacidade</a>
+            </footer>
         </div>
-    </footer>
+    </div>
+
+    <partial name="_Toast" />
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
+

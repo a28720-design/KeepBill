@@ -1,10 +1,34 @@
+@using System.Text.Json
 @model KeepBill.Models.ViewModels.ReportsViewModel
 @{
     ViewData["Title"] = "Relatorios";
+
+    var monthlyLabels = Model.MonthlyBreakdown.Select(m => new DateTime(m.Year, m.Month, 1).ToString("MMM yy")).ToArray();
+    var monthlyInvoiced = Model.MonthlyBreakdown.Select(m => m.Invoiced).ToArray();
+    var monthlyReceived = Model.MonthlyBreakdown.Select(m => m.Received).ToArray();
+
+    var statusLabels = Model.StatusBreakdown.Select(x => x.Label).ToArray();
+    var statusValues = Model.StatusBreakdown.Select(x => x.Value).ToArray();
+
+    var categoryLabels = Model.CategoryBreakdown.Select(x => x.Label).ToArray();
+    var categoryValues = Model.CategoryBreakdown.Select(x => x.Value).ToArray();
+
+    var paymentMethodLabels = Model.PaymentMethodBreakdown.Select(x => x.Label).ToArray();
+    var paymentMethodValues = Model.PaymentMethodBreakdown.Select(x => x.Value).ToArray();
+
+    var trendLabels = Model.DailyTrend.Select(x => x.Day.ToString("dd/MM")).ToArray();
+    var trendInvoiced = Model.DailyTrend.Select(x => x.Invoiced).ToArray();
+    var trendReceived = Model.DailyTrend.Select(x => x.Received).ToArray();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+    <div>
+        <h1 class="h3 mb-1">@ViewData["Title"]</h1>
+        <p class="text-muted mb-0">
+            Periodo: <strong>@Model.From.ToString("dd/MM/yyyy")</strong> a <strong>@Model.To.ToString("dd/MM/yyyy")</strong> (@Model.PeriodDays dias)
+        </p>
+    </div>
+    <button type="button" id="downloadPdfBtn" class="btn btn-outline-secondary">Descarregar PDF</button>
 </div>
 
 <form method="get" class="row g-2 align-items-end mb-3">
@@ -17,132 +41,324 @@
         <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" />
     </div>
     <div class="col-12 col-md-auto">
-        <button type="submit" class="btn btn-primary">Atualizar</button>
+        <button type="submit" class="btn btn-primary">Atualizar relatorio</button>
     </div>
 </form>
 
-<div class="row g-3 mb-3">
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <p class="text-muted mb-1">Faturado no periodo</p>
-                <h4 class="mb-0">@Model.InvoicedTotal.ToString("C")</h4>
+<div id="reportExportArea">
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card h-100 metric-card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Faturado no periodo</p>
+                    <h4 class="mb-0">@Model.InvoicedTotal.ToString("C")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 metric-card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Recebido no periodo</p>
+                    <h4 class="mb-0">@Model.ReceivedTotal.ToString("C")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 metric-card">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Taxa de cobranca</p>
+                    <h4 class="mb-0">@Model.ReceivedRatePercent.ToString("0.##")%</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 metric-card border-danger-subtle">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Em atraso</p>
+                    <h4 class="mb-0 text-danger">@Model.OverdueTotal.ToString("C")</h4>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <p class="text-muted mb-1">Recebido no periodo</p>
-                <h4 class="mb-0">@Model.ReceivedTotal.ToString("C")</h4>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Faturas emitidas</p>
+                    <h4 class="mb-0">@Model.IssuedInvoices</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Valor medio por fatura</p>
+                    <h4 class="mb-0">@Model.AverageInvoiceValue.ToString("C")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Tempo medio de pagamento</p>
+                    <h4 class="mb-0">@Model.AverageDaysToPayment.ToString("0.##") dias</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Saldo aberto global</p>
+                    <h4 class="mb-0">@Model.OutstandingTotal.ToString("C")</h4>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="card h-100">
-            <div class="card-body">
-                <p class="text-muted mb-1">Faturas emitidas</p>
-                <h4 class="mb-0">@Model.IssuedInvoices</h4>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Evolucao mensal: faturado vs recebido</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="monthlyChart" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Estado das faturas</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="statusChart" height="210"></canvas>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="card h-100">
-            <div class="card-body">
-                <p class="text-muted mb-1">Novos clientes</p>
-                <h4 class="mb-0">@Model.NewCustomers</h4>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Distribuicao por categorias</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryChart" height="140"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Metodos de pagamento</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="paymentMethodChart" height="140"></canvas>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
-        <div class="card h-100 border-danger-subtle">
-            <div class="card-body">
-                <p class="text-muted mb-1">Em atraso</p>
-                <h4 class="mb-0 text-danger">@Model.OverdueTotal.ToString("C")</h4>
+
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Tendencia diaria</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="dailyTrendChart" height="110"></canvas>
+                </div>
             </div>
+        </div>
+    </div>
+    <div class="card mt-3">
+        <div class="card-body">
+            <small class="text-muted">Novos clientes no periodo: @Model.NewCustomers</small>
         </div>
     </div>
 </div>
 
-<div class="row g-3">
-    <div class="col-lg-7">
-        <div class="card h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Evolucao mensal</h5>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Mes</th>
-                            <th>Faturado</th>
-                            <th>Recebido</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @if (!Model.MonthlyBreakdown.Any())
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script>
+        const monthlyLabels = @Html.Raw(JsonSerializer.Serialize(monthlyLabels));
+        const monthlyInvoiced = @Html.Raw(JsonSerializer.Serialize(monthlyInvoiced));
+        const monthlyReceived = @Html.Raw(JsonSerializer.Serialize(monthlyReceived));
+
+        const statusLabels = @Html.Raw(JsonSerializer.Serialize(statusLabels));
+        const statusValues = @Html.Raw(JsonSerializer.Serialize(statusValues));
+
+        const categoryLabels = @Html.Raw(JsonSerializer.Serialize(categoryLabels));
+        const categoryValues = @Html.Raw(JsonSerializer.Serialize(categoryValues));
+
+        const paymentMethodLabels = @Html.Raw(JsonSerializer.Serialize(paymentMethodLabels));
+        const paymentMethodValues = @Html.Raw(JsonSerializer.Serialize(paymentMethodValues));
+
+        const trendLabels = @Html.Raw(JsonSerializer.Serialize(trendLabels));
+        const trendInvoiced = @Html.Raw(JsonSerializer.Serialize(trendInvoiced));
+        const trendReceived = @Html.Raw(JsonSerializer.Serialize(trendReceived));
+
+        const palette = [
+            "#1c4fa3", "#21a06d", "#f59f00", "#d94848", "#6f42c1",
+            "#0b7285", "#5c7cfa", "#2b8a3e", "#f76707", "#495057"
+        ];
+
+        new Chart(document.getElementById("monthlyChart"), {
+            type: "bar",
+            data: {
+                labels: monthlyLabels,
+                datasets: [
                     {
-                        <tr>
-                            <td colspan="3" class="text-center text-muted py-4">Sem dados no periodo.</td>
-                        </tr>
-                    }
-                    else
+                        label: "Faturado",
+                        data: monthlyInvoiced,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(28, 79, 163, 0.85)"
+                    },
                     {
-                        foreach (var item in Model.MonthlyBreakdown)
-                        {
-                            var monthDate = new DateTime(item.Year, item.Month, 1);
-                            <tr>
-                                <td>@monthDate.ToString("MMMM yyyy")</td>
-                                <td>@item.Invoiced.ToString("C")</td>
-                                <td>@item.Received.ToString("C")</td>
-                            </tr>
-                        }
+                        label: "Recebido",
+                        data: monthlyReceived,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(33, 160, 109, 0.85)"
                     }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-5">
-        <div class="card h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Top clientes</h5>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Cliente</th>
-                            <th>Faturas</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @if (!Model.TopCustomers.Any())
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } }
+            }
+        });
+
+        new Chart(document.getElementById("statusChart"), {
+            type: "doughnut",
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusValues,
+                    backgroundColor: palette.slice(0, Math.max(1, statusLabels.length))
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } }
+            }
+        });
+
+        new Chart(document.getElementById("categoryChart"), {
+            type: "bar",
+            data: {
+                labels: categoryLabels,
+                datasets: [{
+                    label: "Total por categoria",
+                    data: categoryValues,
+                    backgroundColor: "rgba(92, 124, 250, 0.78)",
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        new Chart(document.getElementById("paymentMethodChart"), {
+            type: "pie",
+            data: {
+                labels: paymentMethodLabels,
+                datasets: [{
+                    data: paymentMethodValues,
+                    backgroundColor: palette.slice(0, Math.max(1, paymentMethodLabels.length))
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } }
+            }
+        });
+
+        new Chart(document.getElementById("dailyTrendChart"), {
+            type: "line",
+            data: {
+                labels: trendLabels,
+                datasets: [
                     {
-                        <tr>
-                            <td colspan="3" class="text-center text-muted py-4">Sem dados no periodo.</td>
-                        </tr>
-                    }
-                    else
+                        label: "Faturado",
+                        data: trendInvoiced,
+                        borderColor: "#1c4fa3",
+                        backgroundColor: "rgba(28, 79, 163, 0.14)",
+                        fill: true,
+                        tension: 0.3
+                    },
                     {
-                        foreach (var customer in Model.TopCustomers)
-                        {
-                            <tr>
-                                <td>
-                                    <a asp-controller="Customers" asp-action="Details" asp-route-id="@customer.CustomerId">@customer.CustomerName</a>
-                                </td>
-                                <td>@customer.InvoiceCount</td>
-                                <td>@customer.InvoicedTotal.ToString("C")</td>
-                            </tr>
-                        }
+                        label: "Recebido",
+                        data: trendReceived,
+                        borderColor: "#21a06d",
+                        backgroundColor: "rgba(33, 160, 109, 0.14)",
+                        fill: true,
+                        tension: 0.3
                     }
-                    </tbody>
-                </table>
-            </div>
-            <div class="card-footer bg-white">
-                <small class="text-muted">Saldo aberto global: @Model.OutstandingTotal.ToString("C")</small>
-            </div>
-        </div>
-    </div>
-</div>
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } }
+            }
+        });
+
+        const exportBtn = document.getElementById("downloadPdfBtn");
+        const reportArea = document.getElementById("reportExportArea");
+        const { jsPDF } = window.jspdf;
+
+        exportBtn?.addEventListener("click", async () => {
+            if (!reportArea) return;
+
+            exportBtn.disabled = true;
+            const originalLabel = exportBtn.textContent;
+            exportBtn.textContent = "A gerar PDF...";
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 400));
+
+                const canvas = await html2canvas(reportArea, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: "#ffffff"
+                });
+
+                const imageData = canvas.toDataURL("image/png");
+                const pdf = new jsPDF("p", "mm", "a4");
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const margin = 10;
+                const usableWidth = pageWidth - (margin * 2);
+                const fullImageHeight = (canvas.height * usableWidth) / canvas.width;
+
+                let remainingHeight = fullImageHeight;
+                let offsetY = 0;
+
+                while (remainingHeight > 0) {
+                    pdf.addImage(imageData, "PNG", margin, margin - offsetY, usableWidth, fullImageHeight);
+                    remainingHeight -= (pageHeight - (margin * 2));
+                    offsetY += (pageHeight - (margin * 2));
+                    if (remainingHeight > 0) {
+                        pdf.addPage();
+                    }
+                }
+
+                const fileName = `relatorio-keepbill-${new Date().toISOString().slice(0, 10)}.pdf`;
+                pdf.save(fileName);
+            } catch (err) {
+                alert("Nao foi possivel gerar o PDF. Tenta novamente.");
+                console.error(err);
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = originalLabel;
+            }
+        });
+    </script>
+}

@@ -38,7 +38,15 @@ namespace KeepBill.Controllers
             _userEmailInboxSettingsService = userEmailInboxSettingsService;
         }
 
-        public async Task<IActionResult> Index(string? status, string? source, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
+        public async Task<IActionResult> Index(
+            string? status,
+            string? source,
+            string? category,
+            string? search,
+            DateTime? dueFrom,
+            DateTime? dueTo,
+            int? dueSoonDays,
+            bool overdueOnly = false)
         {
             IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
@@ -46,16 +54,18 @@ namespace KeepBill.Controllers
                 .Include(i => i.Payments);
 
             query = await ApplyOwnershipScopeAsync(query);
-            query = ApplyInvoiceFilters(query, status, source, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
+            query = ApplyInvoiceFilters(query, status, source, category, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             ViewData["SelectedStatus"] = status;
             ViewData["SelectedSource"] = source;
+            ViewData["SelectedCategory"] = category;
             ViewData["Search"] = search;
             ViewData["DueFrom"] = dueFrom?.ToString("yyyy-MM-dd");
             ViewData["DueTo"] = dueTo?.ToString("yyyy-MM-dd");
             ViewData["DueSoonDays"] = dueSoonDays;
             ViewData["OverdueOnly"] = overdueOnly;
             ViewData["Statuses"] = Enum.GetNames(typeof(InvoiceStatus));
+            ViewData["Categories"] = new[] { "Utilidades", "Telecomunicacoes", "Software", "Renda", "Transporte", "Seguros", "Impostos", "Compras", "Outros" };
             var lastSync = _emailInvoiceScannerService.GetLastResult();
             if (TempData["EmailLastSyncUtc"] is string tempLastSync && DateTime.TryParse(tempLastSync, out var parsedSync))
             {
@@ -190,6 +200,33 @@ namespace KeepBill.Controllers
             await _context.SaveChangesAsync();
             TempData["Toast"] = "Estado da fatura atualizado.";
             return RedirectToAction(nameof(Details), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Lines)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (invoice == null)
+            {
+                TempData["Toast"] = "Fatura nao encontrada.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (!await CanAccessInvoiceAsync(invoice))
+            {
+                return Forbid();
+            }
+
+            _context.Invoices.Remove(invoice);
+            await _context.SaveChangesAsync();
+
+            TempData["Toast"] = $"Fatura {invoice.Number} apagada com sucesso.";
+            return RedirectToAction(nameof(Index));
         }
 
         [HttpGet]
@@ -597,7 +634,15 @@ namespace KeepBill.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> ExportCsv(string? status, string? source, string? search, DateTime? dueFrom, DateTime? dueTo, int? dueSoonDays, bool overdueOnly = false)
+        public async Task<IActionResult> ExportCsv(
+            string? status,
+            string? source,
+            string? category,
+            string? search,
+            DateTime? dueFrom,
+            DateTime? dueTo,
+            int? dueSoonDays,
+            bool overdueOnly = false)
         {
             IQueryable<Invoice> query = _context.Invoices
                 .AsNoTracking()
@@ -605,21 +650,25 @@ namespace KeepBill.Controllers
                 .Include(i => i.Payments);
 
             query = await ApplyOwnershipScopeAsync(query);
-            query = ApplyInvoiceFilters(query, status, source, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
+            query = ApplyInvoiceFilters(query, status, source, category, search, dueFrom, dueTo, dueSoonDays, overdueOnly);
 
             var invoices = await query.ToListAsync();
             var sb = new StringBuilder();
-            sb.AppendLine("Numero,Cliente,Emissao,Vencimento,Estado,Total,Pago,Saldo");
+            sb.AppendLine("Numero,Cliente,Emissao,Vencimento,Estado,Categoria,OrigemLiteral,Total,Pago,Saldo");
             foreach (var invoice in invoices)
             {
                 var paid = invoice.Payments.Sum(p => p.Amount);
                 var balance = invoice.GrandTotal - paid;
+                var importedCategory = ExtractMetadataValue(invoice.Notes, "Categoria:");
+                var sourceLiteral = ExtractMetadataValue(invoice.Notes, "Origem literal:");
                 sb.AppendLine(string.Join(',',
                     Escape(invoice.Number),
                     Escape(invoice.Customer?.Name ?? string.Empty),
                     invoice.IssueDate.ToString("yyyy-MM-dd"),
                     invoice.DueDate.ToString("yyyy-MM-dd"),
                     invoice.Status,
+                    Escape(importedCategory),
+                    Escape(sourceLiteral),
                     invoice.GrandTotal.ToString("0.00"),
                     paid.ToString("0.00"),
                     balance.ToString("0.00")));
@@ -638,10 +687,30 @@ namespace KeepBill.Controllers
             return value;
         }
 
+        private static string ExtractMetadataValue(string? notes, string key)
+        {
+            if (string.IsNullOrWhiteSpace(notes) || string.IsNullOrWhiteSpace(key))
+            {
+                return string.Empty;
+            }
+
+            var lines = notes.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                if (line.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return line.Substring(key.Length).Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
         private IQueryable<Invoice> ApplyInvoiceFilters(
             IQueryable<Invoice> query,
             string? status,
             string? source,
+            string? category,
             string? search,
             DateTime? dueFrom,
             DateTime? dueTo,
@@ -672,6 +741,12 @@ namespace KeepBill.Controllers
                 query = query.Where(i =>
                     EF.Functions.ILike(i.Number, $"%{term}%") ||
                     EF.Functions.ILike(i.Customer!.Name, $"%{term}%"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                var categoryTerm = category.Trim();
+                query = query.Where(i => i.Notes != null && EF.Functions.ILike(i.Notes, $"%Categoria: {categoryTerm}%"));
             }
 
             if (dueFrom.HasValue)

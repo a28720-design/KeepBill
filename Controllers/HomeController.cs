@@ -88,7 +88,6 @@ namespace KeepBill.Controllers
             var vm = new DashboardViewModel
             {
                 TotalCustomers = await customersQuery.CountAsync(),
-                ActiveProducts = await _context.Products.CountAsync(p => p.IsActive),
                 InvoicesIssued = await invoicesQuery.CountAsync(),
                 OutstandingAmount = await invoicesQuery
                     .Where(i => i.Status != InvoiceStatus.Paid && i.Status != InvoiceStatus.Cancelled)

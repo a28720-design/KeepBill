@@ -3,12 +3,14 @@
     ViewData["Title"] = "Faturas";
     var selectedStatus = ViewData["SelectedStatus"] as string;
     var selectedSource = ViewData["SelectedSource"] as string;
+    var selectedCategory = ViewData["SelectedCategory"] as string;
     var search = ViewData["Search"] as string;
     var dueFrom = ViewData["DueFrom"] as string;
     var dueTo = ViewData["DueTo"] as string;
     var dueSoonDays = ViewData["DueSoonDays"] as int?;
     var overdueOnly = (bool)(ViewData["OverdueOnly"] ?? false);
     var statuses = ViewData["Statuses"] as string[];
+    var categories = ViewData["Categories"] as string[];
     var invoiceCount = Model.Count();
     var totalAmount = Model.Sum(i => i.GrandTotal);
     var totalBalance = Model.Sum(i => i.GrandTotal - i.Payments.Sum(p => p.Amount));
@@ -28,6 +30,7 @@
         <a asp-action="ExportCsv"
            asp-route-status="@selectedStatus"
            asp-route-source="@selectedSource"
+           asp-route-category="@selectedCategory"
            asp-route-search="@search"
            asp-route-dueFrom="@dueFrom"
            asp-route-dueTo="@dueTo"
@@ -135,6 +138,19 @@
             <option value="email" selected="@(selectedSource == "email" ? "selected" : null)">Email</option>
         </select>
     </div>
+    <div class="col-12 col-lg-2">
+        <label class="form-label mb-1">Categoria</label>
+        <select name="category" class="form-select">
+            <option value="" selected="@(string.IsNullOrWhiteSpace(selectedCategory) ? "selected" : null)">Todas</option>
+            @if (categories != null)
+            {
+                foreach (var cat in categories)
+                {
+                    <option value="@cat" selected="@(selectedCategory == cat ? "selected" : null)">@cat</option>
+                }
+            }
+        </select>
+    </div>
     <div class="col-6 col-lg-2">
         <label class="form-label mb-1">Venc. de</label>
         <input type="date" name="dueFrom" value="@dueFrom" class="form-control" />
@@ -165,6 +181,8 @@
             <tr>
                 <th>Numero</th>
                 <th>Origem</th>
+                <th>Categoria</th>
+                <th>Descricao literal</th>
                 <th>Cliente</th>
                 <th>Emissao</th>
                 <th>Vencimento</th>
@@ -178,7 +196,7 @@
         @if (!Model.Any())
         {
             <tr>
-                <td colspan="9" class="text-center text-muted py-4">Ainda nao existem faturas.</td>
+                <td colspan="11" class="text-center text-muted py-4">Ainda nao existem faturas.</td>
             </tr>
         }
         else
@@ -191,6 +209,8 @@
                 var isOverdue = invoice.DueDate.Date < DateTime.UtcNow.Date &&
                                 invoice.Status != KeepBill.Models.InvoiceStatus.Paid &&
                                 invoice.Status != KeepBill.Models.InvoiceStatus.Cancelled;
+                var importedCategory = ExtractMetadataValue(invoice.Notes, "Categoria:");
+                var sourceLiteral = ExtractMetadataValue(invoice.Notes, "Origem literal:");
                 <tr>
                     <td>@invoice.Number</td>
                     <td>
@@ -203,6 +223,8 @@
                             <span class="badge bg-secondary">Manual</span>
                         }
                     </td>
+                    <td>@(string.IsNullOrWhiteSpace(importedCategory) ? "-" : importedCategory)</td>
+                    <td class="text-muted">@(string.IsNullOrWhiteSpace(sourceLiteral) ? "-" : sourceLiteral)</td>
                     <td>@invoice.Customer?.Name</td>
                     <td>@invoice.IssueDate.ToString("dd/MM/yyyy")</td>
                     <td>
@@ -220,6 +242,14 @@
                     <td class="text-end">
                         <a asp-action="Details" asp-route-id="@invoice.Id" class="btn btn-sm btn-outline-secondary">Detalhes</a>
                         <a asp-action="Edit" asp-route-id="@invoice.Id" class="btn btn-sm btn-primary">Editar</a>
+                        <form asp-action="Delete"
+                              asp-route-id="@invoice.Id"
+                              method="post"
+                              class="d-inline"
+                              onsubmit="return confirm('Tens a certeza que queres apagar esta fatura? Esta acao nao pode ser desfeita.');">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Apagar</button>
+                        </form>
                     </td>
                 </tr>
             }
@@ -229,6 +259,25 @@
 </div>
 
 @functions{
+    private string ExtractMetadataValue(string? notes, string key)
+    {
+        if (string.IsNullOrWhiteSpace(notes) || string.IsNullOrWhiteSpace(key))
+        {
+            return string.Empty;
+        }
+
+        var lines = notes.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            if (line.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return line.Substring(key.Length).Trim();
+            }
+        }
+
+        return string.Empty;
+    }
+
     private string GetStatusClass(KeepBill.Models.InvoiceStatus status)
     {
         return status switch

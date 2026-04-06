@@ -1,26 +1,26 @@
-﻿@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.Identity
 @inject SignInManager<IdentityUser> SignInManager
 @inject UserManager<IdentityUser> UserManager
 
-<ul class="navbar-nav align-items-lg-center gap-lg-1">
 @if (SignInManager.IsSignedIn(User))
 {
-    <li class="nav-item">
-        <a class="nav-link app-nav-link fw-semibold" asp-area="Identity" asp-page="/Account/Manage/Index" title="Gerir conta">@User.Identity?.Name</a>
-    </li>
-    <li class="nav-item">
-        <form class="form-inline" asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="@Url.Action("Index", "Home", new { area = "" })">
-            <button type="submit" class="btn btn-sm btn-outline-secondary ms-lg-2">Sair</button>
+    <div class="app-account-chip compact">
+        <div class="app-account-avatar">
+            @((User.Identity?.Name?.FirstOrDefault().ToString() ?? "U").ToUpperInvariant())
+        </div>
+        <div class="app-account-meta">
+            <a class="app-account-name" asp-area="Identity" asp-page="/Account/Manage/Index" title="Gerir conta">@User.Identity?.Name</a>
+            <small>Conta</small>
+        </div>
+        <form class="m-0" asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="@Url.Action("Index", "Home", new { area = "" })">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Sair</button>
         </form>
-    </li>
+    </div>
 }
 else
 {
-    <li class="nav-item">
-        <a class="nav-link app-nav-link" asp-area="Identity" asp-page="/Account/Register">Registar</a>
-    </li>
-    <li class="nav-item">
-        <a class="btn btn-primary btn-sm px-3 ms-lg-2 mt-2 mt-lg-0" asp-area="Identity" asp-page="/Account/Login">Entrar</a>
-    </li>
+    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+        <a class="btn btn-sm btn-outline-secondary" asp-area="Identity" asp-page="/Account/Register">Registar</a>
+        <a class="btn btn-sm btn-primary px-3" asp-area="Identity" asp-page="/Account/Login">Entrar</a>
+    </div>
 }
-</ul>
